@@ -1,31 +1,106 @@
 /* src/components/VersaillesGrid.module.css */
-.pattern {
-    display: grid;
-    grid-template-columns: repeat(8, 1fr);
-    grid-auto-rows: minmax(60px, 1fr);
-    gap: 4px;
-    width: 100%;
-    max-width: 800px;
-    margin: 0 auto;
-    background-color: rgba(255, 255, 255, 0.1);
+.gridContainer {
+  width: 100%;
+  height: 100%;
+  min-height: 400px;
+  position: relative;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 8px;
+  margin: 0 auto;
+  overflow: hidden;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(15, 70px);
+  gap: 4px;
+  padding: 8px;
+  width: auto;
+  height: auto;
+  background: rgba(0, 0, 0, 0.2);
+}
+
+.transformWrapper {
+  width: 100%;
+  height: 100%;
+}
+
+.transformContent {
+  width: 100%;
+  height: 100%;
+}
+
+.gridControls {
+  position: absolute;
+  bottom: 16px;
+  right: 16px;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.controlButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background-color: rgba(147, 51, 234, 0.8);
+  border: none;
+  color: white;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.controlButton:hover {
+  background-color: rgba(147, 51, 234, 1);
+  transform: scale(1.05);
+}
+
+.controlButton:active {
+  transform: scale(0.95);
+}
+
+.controlIcon {
+  width: 20px;
+  height: 20px;
+}
+
+@media (min-width: 640px) {
+  .grid {
+    grid-template-columns: repeat(15, 70px);
+  }
+  
+  .gridContainer {
+    min-height: 500px;
+  }
+}
+
+@media (max-width: 639px) {
+  .gridContainer {
+    min-height: 350px;
+  }
+  
+  .grid {
     padding: 4px;
-    border-radius: 8px;
+    gap: 2px;
+    grid-template-columns: repeat(15, 50px);
   }
   
-  .square {
-    position: relative;
-    min-height: 60px;
-    transition: all 0.2s;
-    border-radius: 4px;
-    cursor: pointer;
+  .gridControls {
+    bottom: 8px;
+    right: 8px;
   }
   
-  .square:hover {
-    transform: scale(1.02);
-    box-shadow: 0 0 10px rgba(0, 0, 0, 0.3);
+  .controlButton {
+    width: 36px;
+    height: 36px;
   }
   
-  .large {
-    grid-column: span 2;
-    grid-row: span 2;
+  .controlIcon {
+    width: 16px;
+    height: 16px;
   }
+}

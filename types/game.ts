@@ -15,6 +15,7 @@ export interface Square {
         height: number;
       };
     moneyPerSecond: number;
+    adjacentSquares: string[];
   }
   
   export interface GameState {
@@ -23,4 +24,5 @@ export interface Square {
     coins: number;
     autoClickDamage: number;
     seed: string;
+    coinMultiplier?: number;
   }

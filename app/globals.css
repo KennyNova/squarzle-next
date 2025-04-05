@@ -14,8 +14,102 @@
   }
 }
 
+html, body {
+  height: 100%;
+}
+
 body {
   color: var(--foreground);
   background: var(--background);
   font-family: Arial, Helvetica, sans-serif;
+  overflow-x: hidden;
+}
+
+/* Ensure the root div fills the screen */
+div#__next, div#root {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Prevent double-tap zoom and other unwanted touch behaviors on mobile */
+html, body {
+  touch-action: pan-x pan-y;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Prevent pull-to-refresh on mobile */
+body {
+  overscroll-behavior-y: contain;
+}
+
+/* Disable text selection on game elements */
+.square, .controlButton, .grid {
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* Circular sticky button animation */
+@keyframes pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(147, 51, 234, 0.7);
+  }
+  70% {
+    box-shadow: 0 0 0 10px rgba(147, 51, 234, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(147, 51, 234, 0);
+  }
+}
+
+.sticky-button {
+  animation: pulse 2s infinite;
+}
+
+.sticky-button:active {
+  animation: none;
+  transform: scale(0.95);
+}
+
+/* Animated arrow for the sticky button */
+@keyframes bounce {
+  0%, 20%, 50%, 80%, 100% {
+    transform: translateY(0);
+  }
+  40% {
+    transform: translateY(-3px);
+  }
+  60% {
+    transform: translateY(-1px);
+  }
+}
+
+.arrow-icon {
+  animation: bounce 2s infinite;
+  transition: transform 0.3s ease;
+}
+
+.menu-open .arrow-icon {
+  transform: rotate(180deg);
+  animation: none;
+}
+
+/* Custom scrollbar for better UX */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.1);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(147, 51, 234, 0.5);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(147, 51, 234, 0.8);
 }
