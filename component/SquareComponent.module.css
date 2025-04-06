@@ -21,6 +21,26 @@
   background-color: transparent;
 }
 
+/* Gate styling */
+.square[data-gate='true'] {
+  border-color: #0ea5e9;
+  border-width: 3px;
+  box-shadow: 0 0 8px rgba(14, 165, 233, 0.6);
+}
+
+.square[data-gate='true'][data-status='available'] {
+  animation: gateGlow 2s infinite alternate;
+}
+
+@keyframes gateGlow {
+  0% {
+    box-shadow: 0 0 8px rgba(14, 165, 233, 0.6);
+  }
+  100% {
+    box-shadow: 0 0 15px rgba(14, 165, 233, 0.9);
+  }
+}
+
 .healthBar {
   position: absolute;
   top: 0;
@@ -30,6 +50,22 @@
   background-color: #22c55e;
   transform-origin: left;
   transition: transform 0.2s ease-out;
+}
+
+/* Special styling for gate health bars */
+.gateHealthBar {
+  background: linear-gradient(90deg, #0ea5e9, #3b82f6);
+  background-size: 200% 100%;
+  animation: gradientShift 3s infinite alternate;
+}
+
+@keyframes gradientShift {
+  0% {
+    background-position: 0% 50%;
+  }
+  100% {
+    background-position: 100% 50%;
+  }
 }
 
 .bossIndicator {
@@ -48,6 +84,54 @@
   z-index: 1;
 }
 
+.gateIndicator {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 18px;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  opacity: 0.8;
+}
+
+.gateRequirement {
+  font-size: 10px;
+  background-color: rgba(0, 0, 0, 0.6);
+  color: white;
+  border-radius: 10px;
+  padding: 1px 4px;
+  margin-top: 2px;
+  font-weight: bold;
+}
+
+.gateHealthDisplay {
+  position: absolute;
+  bottom: 4px;
+  left: 4px;
+  font-size: 10px;
+  background-color: rgba(14, 165, 233, 0.7);
+  color: white;
+  border-radius: 8px;
+  padding: 1px 4px;
+  font-weight: bold;
+  z-index: 1;
+}
+
+.levelIndicator {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  font-size: 10px;
+  background-color: rgba(0, 0, 0, 0.5);
+  color: white;
+  padding: 1px 4px;
+  border-radius: 8px;
+  z-index: 1;
+}
+
 .square:hover {
   transform: scale(1.02);
   transition: transform 0.2s ease;
@@ -62,10 +146,26 @@
   .treasureIndicator {
     font-size: 20px;
   }
+  
+  .gateIndicator {
+    font-size: 22px;
+  }
+  
+  .gateRequirement {
+    font-size: 12px;
+  }
+  
+  .gateHealthDisplay {
+    font-size: 12px;
+  }
 }
 
 @media (max-width: 639px) {
   .square {
     border-width: 1px;
+  }
+  
+  .square[data-gate='true'] {
+    border-width: 2px;
   }
 } 
