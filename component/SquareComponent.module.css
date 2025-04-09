@@ -21,11 +21,36 @@
   background-color: transparent;
 }
 
+/* Level-based coloring */
+.square[data-level="1"] {
+  border-color: #9333ea;
+}
+
+.square[data-level="2"] {
+  border-color: #6366f1;
+}
+
+.square[data-level="3"] {
+  border-color: #0ea5e9;
+}
+
+.square[data-level="4"] {
+  border-color: #10b981;
+}
+
+.square[data-level="5"] {
+  border-color: #f59e0b;
+}
+
+.square[data-level="6"] {
+  border-color: #ef4444;
+}
+
 /* Gate styling */
 .square[data-gate='true'] {
-  border-color: #0ea5e9;
+  border-color: #f59e0b;
   border-width: 3px;
-  box-shadow: 0 0 8px rgba(14, 165, 233, 0.6);
+  box-shadow: 0 0 8px rgba(245, 158, 11, 0.6);
 }
 
 .square[data-gate='true'][data-status='available'] {
@@ -33,6 +58,26 @@
 }
 
 @keyframes gateGlow {
+  0% {
+    box-shadow: 0 0 8px rgba(245, 158, 11, 0.6);
+  }
+  100% {
+    box-shadow: 0 0 15px rgba(245, 158, 11, 0.9);
+  }
+}
+
+/* Portal styling */
+.square[data-portal='true'] {
+  border-color: #0ea5e9;
+  border-width: 3px;
+  box-shadow: 0 0 8px rgba(14, 165, 233, 0.6);
+}
+
+.square[data-portal='true'][data-status='available'] {
+  animation: portalGlow 2s infinite alternate;
+}
+
+@keyframes portalGlow {
   0% {
     box-shadow: 0 0 8px rgba(14, 165, 233, 0.6);
   }
@@ -54,6 +99,13 @@
 
 /* Special styling for gate health bars */
 .gateHealthBar {
+  background: linear-gradient(90deg, #f59e0b, #d97706);
+  background-size: 200% 100%;
+  animation: gradientShift 3s infinite alternate;
+}
+
+/* Special styling for portal health bars */
+.portalHealthBar {
   background: linear-gradient(90deg, #0ea5e9, #3b82f6);
   background-size: 200% 100%;
   animation: gradientShift 3s infinite alternate;
@@ -97,6 +149,29 @@
   opacity: 0.8;
 }
 
+.portalIndicator {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 20px;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  animation: portalSpin 3s linear infinite;
+  opacity: 0.8;
+}
+
+@keyframes portalSpin {
+  from {
+    transform: translate(-50%, -50%) rotate(0deg);
+  }
+  to {
+    transform: translate(-50%, -50%) rotate(360deg);
+  }
+}
+
 .gateRequirement {
   font-size: 10px;
   background-color: rgba(0, 0, 0, 0.6);
@@ -112,7 +187,7 @@
   bottom: 4px;
   left: 4px;
   font-size: 10px;
-  background-color: rgba(14, 165, 233, 0.7);
+  background-color: rgba(245, 158, 11, 0.7);
   color: white;
   border-radius: 8px;
   padding: 1px 4px;
@@ -125,11 +200,37 @@
   top: 4px;
   left: 4px;
   font-size: 10px;
-  background-color: rgba(0, 0, 0, 0.5);
-  color: white;
+  font-weight: bold;
   padding: 1px 4px;
   border-radius: 8px;
   z-index: 1;
+  background-color: var(--level-color, rgba(0, 0, 0, 0.7));
+  color: white;
+}
+
+/* Level-specific colors for the level indicator */
+.square[data-level="1"] .levelIndicator {
+  --level-color: rgba(147, 51, 234, 0.7);
+}
+
+.square[data-level="2"] .levelIndicator {
+  --level-color: rgba(99, 102, 241, 0.7);
+}
+
+.square[data-level="3"] .levelIndicator {
+  --level-color: rgba(14, 165, 233, 0.7);
+}
+
+.square[data-level="4"] .levelIndicator {
+  --level-color: rgba(16, 185, 129, 0.7);
+}
+
+.square[data-level="5"] .levelIndicator {
+  --level-color: rgba(245, 158, 11, 0.7);
+}
+
+.square[data-level="6"] .levelIndicator {
+  --level-color: rgba(239, 68, 68, 0.7);
 }
 
 .square:hover {
@@ -151,11 +252,19 @@
     font-size: 22px;
   }
   
+  .portalIndicator {
+    font-size: 24px;
+  }
+  
   .gateRequirement {
     font-size: 12px;
   }
   
   .gateHealthDisplay {
+    font-size: 12px;
+  }
+  
+  .levelIndicator {
     font-size: 12px;
   }
 }
@@ -165,7 +274,8 @@
     border-width: 1px;
   }
   
-  .square[data-gate='true'] {
+  .square[data-gate='true'],
+  .square[data-portal='true'] {
     border-width: 2px;
   }
 } 

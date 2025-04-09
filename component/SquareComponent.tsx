@@ -14,25 +14,34 @@ export default function SquareComponent({ square, onClick }: SquareComponentProp
       className={styles.square}
       data-status={square.status}
       data-gate={square.isGate ? "true" : "false"}
+      data-portal={square.isPortal ? "true" : "false"}
+      data-level={square.level || 1}
       style={{ 
         opacity: square.status === 'dead' ? 0.5 : 1,
       }}
       onClick={onClick}
     >
       <div 
-        className={`${styles.healthBar} ${square.isGate ? styles.gateHealthBar : ''}`}
+        className={`${styles.healthBar} ${square.isGate ? styles.gateHealthBar : ''} ${square.isPortal ? styles.portalHealthBar : ''}`}
         style={{ 
           transform: `scaleX(${square.status === 'available' ? healthPercentage / 100 : 0})`,
         }}
       />
       
-      {/* Level indicator for gates */}
+      {/* Gate indicator */}
       {square.isGate && (
         <div className={styles.gateIndicator}>
-          <span>🌀</span>
+          <span>⛩️</span>
           {square.gateRequirement && (
             <span className={styles.gateRequirement}>{square.gateRequirement}</span>
           )}
+        </div>
+      )}
+      
+      {/* Portal indicator */}
+      {square.isPortal && (
+        <div className={styles.portalIndicator}>
+          <span>🌀</span>
         </div>
       )}
       
@@ -49,12 +58,13 @@ export default function SquareComponent({ square, onClick }: SquareComponentProp
         </div>
       )}
 
-      {/* Level number (for debugging) */}
-      {square.level && square.level > 1 && (
-        <div className={styles.levelIndicator}>
-          {square.level}
-        </div>
-      )}
+      {/* Level number - always show it */}
+      <div 
+        className={styles.levelIndicator}
+        title={`Level ${square.level || 1}`}
+      >
+        {`L${square.level || 1}`}
+      </div>
       
       {/* Health indicator for gates to show they're tougher */}
       {square.isGate && square.status === 'available' && (

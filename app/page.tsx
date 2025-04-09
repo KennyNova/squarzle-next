@@ -3,9 +3,10 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { GameState, Square } from '@/types/game';
-import { generateMap, getRevealedAdjacents, canPassGate, getGateTunnelSquares } from '@/utils/gameLogic';
+import { generateMap, getRevealedAdjacents, canPassGate, getGateTunnelSquares, getPortalRevealSquares } from '@/utils/gameLogic';
 import VersaillesGrid from '@/component/VersaillesGrid';
 import ItemShop from '@/component/ItemShop';
+import { Button } from "@/component/ui/button";
 
 export default function Home() {
   const [domLoaded, setDomLoaded] = useState(false);
@@ -117,6 +118,78 @@ export default function Home() {
           // Get squares to auto-clear in the tunnel
           const tunnelSquares = getGateTunnelSquares(prev.squares, clickedSquare);
           squaresToReveal = [...new Set([...squaresToReveal, ...tunnelSquares])];
+          
+          // Find and remove the corresponding portal if it exists
+          const correspondingPortal = prev.squares.find(s => 
+            s.isPortal && s.portalTarget === clickedSquare.id
+          );
+          
+          if (correspondingPortal) {
+            // Remove portal properties but keep the square
+            const newSquares = prev.squares.map(square => {
+              if (square.id === correspondingPortal.id) {
+                return {
+                  ...square,
+                  isPortal: false,
+                  portalTarget: undefined
+                };
+              }
+              return square;
+            });
+            
+            return {
+              ...prev,
+              squares: newSquares,
+              coins: prev.coins + treasureBonus,
+              clickDamage: newClickDamage,
+              autoClickDamage: newAutoClickDamage,
+              coinMultiplier: newCoinMultiplier,
+              luckMultiplier: newLuckMultiplier,
+              squaresKilled: newSquaresKilled,
+              gateProgress: newGateProgress,
+              lifetimeEarnings: prev.lifetimeEarnings + treasureBonus,
+            };
+          }
+        }
+        
+        // If this is a portal, reveal the connected gate
+        if (clickedSquare.isPortal) {
+          // Display a message about the portal
+          setGateMessage(`Portal activated! A gate has been revealed!`);
+          setTimeout(() => setGateMessage(null), 3000);
+          
+          // Get the gate to reveal
+          const portalTargets = getPortalRevealSquares(prev.squares, clickedSquare);
+          squaresToReveal = [...new Set([...squaresToReveal, ...portalTargets])];
+          
+          // Find the target gate and make it available
+          const targetGate = prev.squares.find(s => s.id === clickedSquare.portalTarget);
+          if (targetGate) {
+            // Make the target gate available and bypass its requirements
+            const newSquares = prev.squares.map(square => {
+              if (square.id === targetGate.id) {
+                return { 
+                  ...square, 
+                  status: 'available' as const,
+                  gateRequirement: 0 // Bypass the gate requirement
+                };
+              }
+              return square;
+            });
+            
+            return {
+              ...prev,
+              squares: newSquares,
+              coins: prev.coins + treasureBonus,
+              clickDamage: newClickDamage,
+              autoClickDamage: newAutoClickDamage,
+              coinMultiplier: newCoinMultiplier,
+              luckMultiplier: newLuckMultiplier,
+              squaresKilled: newSquaresKilled,
+              gateProgress: newGateProgress,
+              lifetimeEarnings: prev.lifetimeEarnings + treasureBonus,
+            };
+          }
         }
       }
 
@@ -133,8 +206,8 @@ export default function Home() {
         // For gate tunnels, also auto-clear squares ahead (kill them)
         if (newStatus === 'dead' && clickedSquare.isGate) {
           const isTunnelSquare = squaresToReveal.includes(square.id) && 
-                                 square.position.y === clickedSquare.position.y && 
-                                 square.position.x > clickedSquare.position.x;
+                               square.position.y === clickedSquare.position.y && 
+                               square.position.x > clickedSquare.position.x;
           
           if (isTunnelSquare) {
             // Auto-kill the square in the tunnel
@@ -242,6 +315,17 @@ export default function Home() {
               const tunnelSquares = getGateTunnelSquares(prev.squares, firstAvailable);
               squaresToReveal = [...new Set([...squaresToReveal, ...tunnelSquares])];
             }
+            
+            // If this is a portal, reveal the connected gate
+            if (firstAvailable.isPortal) {
+              // Display a message about the portal
+              setGateMessage(`Portal activated! A gate has been revealed!`);
+              setTimeout(() => setGateMessage(null), 3000);
+              
+              // Get the gate to reveal
+              const portalTargets = getPortalRevealSquares(prev.squares, firstAvailable);
+              squaresToReveal = [...new Set([...squaresToReveal, ...portalTargets])];
+            }
           }
           
           const newSquares = prev.squares.map(square => {
@@ -327,28 +411,22 @@ export default function Home() {
     };
   }, [isShopModalOpen]);
 
-  // Shop modal component
-  const ShopModal = () => (
-    <div className={`fixed inset-0 z-50 ${isShopModalOpen ? 'flex' : 'hidden'} items-center justify-center`} onClick={() => setIsShopModalOpen(false)}>
-      <div className="fixed inset-0 bg-black bg-opacity-75"></div>
+  // Shop modal component using a simple React modal instead of Dialog
+  const ShopModal = () => isShopModalOpen ? (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80">
       <div 
         ref={modalRef}
-        className="relative bg-gray-800 rounded-lg w-full max-w-md p-4 m-4 max-h-[90vh] overflow-y-auto" 
-        onClick={(e) => e.stopPropagation()}
+        className="w-full max-w-[425px] bg-gray-800 text-white p-6 rounded-lg shadow-lg border border-gray-700"
       >
         <div className="flex justify-between items-center mb-4">
-          <h2 className="text-xl font-bold">Item Shop</h2>
+          <h3 className="text-lg font-semibold">Item Shop</h3>
           <button 
-            onClick={() => setIsShopModalOpen(false)}
-            className="text-gray-400 hover:text-white p-2"
-            aria-label="Close shop"
+            onClick={() => setIsShopModalOpen(false)} 
+            className="rounded-full h-6 w-6 flex items-center justify-center bg-gray-700 hover:bg-gray-600 text-white"
           >
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
+            ✕
           </button>
         </div>
-        
         <ItemShop 
           gameState={gameState}
           onPurchase={(item) => {
@@ -363,7 +441,7 @@ export default function Home() {
         />
       </div>
     </div>
-  );
+  ) : null;
 
   return (
     <>
@@ -382,12 +460,13 @@ export default function Home() {
             </div>
             
             {/* Shop button on all screen sizes */}
-            <button
+            <Button
               onClick={() => setIsShopModalOpen(true)}
-              className="bg-purple-700 hover:bg-purple-600 py-1 px-3 rounded text-sm transition-colors"
+              variant="secondary"
+              size="sm"
             >
               Shop
-            </button>
+            </Button>
           </div>
         </div>
         

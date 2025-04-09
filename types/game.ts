@@ -7,6 +7,8 @@ export interface Square {
     position: { x: number; y: number };
     isBoss: boolean;
     isGate?: boolean;
+    isPortal?: boolean;
+    portalTarget?: string; // ID of the gate that this portal leads to
     gateRequirement?: number;
     treasure?: {
       type: 'damage' | 'autoclick' | 'coins' | 'luck';

@@ -1,4 +1,7 @@
 import { GameState } from '@/types/game';
+import { Button } from "@/component/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/component/ui/card";
+import { cn } from "@/lib/utils";
 
 interface ItemShopProps {
   gameState: GameState;
@@ -153,10 +156,16 @@ export default function ItemShop({ gameState, onPurchase }: ItemShopProps) {
   return (
     <div className="space-y-6">
       {/* Stats section */}
-      <div className="mb-6 bg-gray-900 rounded-lg p-3 text-center">
-        <h3 className="text-lg font-bold mb-2">Your Stats</h3>
-        <p className="text-sm text-gray-300">Lifetime Earnings: {Math.floor(gameState.lifetimeEarnings)} coins</p>
-      </div>
+      <Card className="bg-gray-900">
+        <CardHeader>
+          <CardTitle className="text-center">Your Stats</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm text-muted-foreground text-center">
+            Lifetime Earnings: {Math.floor(gameState.lifetimeEarnings)} coins
+          </p>
+        </CardContent>
+      </Card>
       
       {/* Category sections */}
       {['damage', 'auto', 'coins', 'luck', 'special'].map((categoryKey) => {
@@ -167,52 +176,62 @@ export default function ItemShop({ gameState, onPurchase }: ItemShopProps) {
         const style = getCategoryStyle(category);
         
         return (
-          <div key={categoryKey} className="mb-6 border border-gray-700 rounded-lg p-4 bg-gray-900 bg-opacity-50 shadow-lg">
-            <h3 className="text-lg font-bold mb-3 flex items-center border-b border-gray-700 pb-2">
-              <span className="mr-2 text-xl">{emoji}</span>
-              {title}
-            </h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {categories[category].map((item) => (
-                <button
-                  key={item.id}
-                  onClick={() => onPurchase(item)}
-                  disabled={!canAfford(item.cost)}
-                  className={`relative overflow-hidden rounded-lg p-3 transition-all duration-200 ${
-                    canAfford(item.cost)
-                      ? `bg-gradient-to-br ${style} shadow-lg hover:shadow-xl transform hover:-translate-y-1`
-                      : 'bg-gray-700 opacity-60'
-                  }`}
-                >
-                  <div className="flex items-start">
-                    <span className="text-2xl mr-3">{item.emoji}</span>
-                    <div className="flex-1">
-                      <h4 className="font-bold">{item.name}</h4>
-                      <p className="text-sm text-gray-200">{item.description}</p>
-                      <p className={`mt-1 font-medium ${canAfford(item.cost) ? 'text-yellow-300' : 'text-gray-400'}`}>
-                        {item.cost} coins
-                      </p>
+          <Card key={categoryKey} className="bg-gray-900 border-gray-700">
+            <CardHeader>
+              <CardTitle className="flex items-center border-b border-gray-700 pb-2">
+                <span className="mr-2 text-xl">{emoji}</span>
+                {title}
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {categories[category].map((item) => (
+                  <Button
+                    key={item.id}
+                    onClick={() => onPurchase(item)}
+                    disabled={!canAfford(item.cost)}
+                    className={cn(
+                      "relative overflow-hidden p-3 h-auto",
+                      canAfford(item.cost) ? style : "bg-gray-700 opacity-60"
+                    )}
+                  >
+                    <div className="flex items-start w-full">
+                      <span className="text-2xl mr-3">{item.emoji}</span>
+                      <div className="flex-1 text-left">
+                        <h4 className="font-bold">{item.name}</h4>
+                        <p className="text-sm text-muted-foreground">{item.description}</p>
+                        <p className={cn(
+                          "mt-1 font-medium",
+                          canAfford(item.cost) ? "text-yellow-300" : "text-gray-400"
+                        )}>
+                          {item.cost} coins
+                        </p>
+                      </div>
                     </div>
-                  </div>
-                  {!canAfford(item.cost) && (
-                    <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-40">
-                      <span className="text-xs font-medium px-2 py-1 bg-red-900 rounded">Need {item.cost - Math.floor(gameState.coins)} more coins</span>
-                    </div>
-                  )}
-                </button>
-              ))}
-            </div>
-          </div>
+                    {!canAfford(item.cost) && (
+                      <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-40">
+                        <span className="text-xs font-medium px-2 py-1 bg-destructive rounded">
+                          Need {item.cost - Math.floor(gameState.coins)} more coins
+                        </span>
+                      </div>
+                    )}
+                  </Button>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
         );
       })}
       
       {/* Coming soon section for locked items */}
       {gameState.lifetimeEarnings < 5000 && (
-        <div className="mb-4 text-center p-3 bg-gray-800 rounded-lg border border-gray-700">
-          <p className="text-gray-400 text-sm">
-            More items will unlock as you earn more coins!
-          </p>
-        </div>
+        <Card className="bg-gray-800 border-gray-700">
+          <CardContent className="p-3">
+            <p className="text-muted-foreground text-sm text-center">
+              More items will unlock as you earn more coins!
+            </p>
+          </CardContent>
+        </Card>
       )}
     </div>
   );

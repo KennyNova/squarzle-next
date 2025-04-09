@@ -8,15 +8,16 @@ const GRID_HEIGHT = 15;
 
 // Constants for game mechanics
 const MAX_ADJACENT_REVEALED = 3; // Maximum squares to reveal after killing one
-const LEVEL_GATE_FREQUENCY = 20; // Place gate every X squares
 const GATE_REQUIREMENT_BASE = 5; // Base number of squares to kill at each gate
 const GATE_HEALTH_MULTIPLIER = 5; // Gates have 5x more health than normal squares
 const GATE_AUTO_CLEAR_COUNT = 7; // Number of squares to auto-clear when a gate is destroyed
+const MAX_LEVEL = 6; // Maximum number of levels in the game
 
 // Helper function to calculate level based on distance from origin
 const calculateLevel = (x: number, y: number): number => {
     const distanceFromOrigin = Math.sqrt(x*x + y*y);
-    return Math.floor(distanceFromOrigin / 3) + 1;
+    // Use smaller level sizes to ensure more distinct levels
+    return Math.min(MAX_LEVEL, Math.floor(distanceFromOrigin / 3) + 1);
 };
 
 // Calculate gate requirement based on gate level
@@ -68,17 +69,24 @@ export const generateMap = (seed: string): Square[] => {
 
     // Create a map to store squares by position for adjacency checks
     const squaresByPosition: { [key: string]: Square } = {};
-
-    // Track gate levels to ensure requirements increase properly
-    const gateLevels: { [key: number]: number } = {};
-    
-    // Pre-determine gate rows - create horizontal gates rather than diagonal ones
-    const gateRows = [3, 7, 11]; // Fixed positions for gate rows
     
     // Fill remaining spaces with 1x1 squares
     let squareCount = 0;
-    let gateCounter = 0;
     
+    // Pre-define fixed gate positions for each level transition
+    // Format: [level, x, y]
+    const gatePositions = [
+        [1, 4, 3],  // Level 1 to 2
+        [2, 7, 5],  // Level 2 to 3
+        [3, 10, 7], // Level 3 to 4
+        [4, 12, 9], // Level 4 to 5
+        [5, 13, 11] // Level 5 to 6
+    ];
+    
+    // Track squares by level
+    const squaresByLevel: { [level: number]: Square[] } = {};
+    
+    // Process all squares first without gates or portals
     for (let y = 0; y < dimensions.height; y++) {
         for (let x = 0; x < dimensions.width; x++) {
             if (template[y][x] >= 0) {
@@ -98,23 +106,8 @@ export const generateMap = (seed: string): Square[] => {
                 // Size multiplier for health and rewards
                 const sizeMultiplier = size === 2 ? 4 : size === 3 ? 2 : 1;
                 
-                // Calculate the level based on distance
+                // Calculate the level based on distance - ensure all squares have a level
                 const level = calculateLevel(x, y);
-                
-                // Check if this should be a gate - now based on fixed positions
-                // Use horizontal rows for gates instead of level-based 
-                const isGate = gateRows.includes(y) && x % 4 === 0 && x > 0;
-                
-                // If this is a gate, calculate the requirement
-                let gateRequirement: number | undefined = undefined;
-                if (isGate) {
-                    gateCounter++;
-                    gateRequirement = calculateGateRequirement(gateCounter);
-                }
-                
-                // Calculate base health - gates have much higher health
-                const baseHealth = Math.floor((isBoss ? 1000 : 100) * Math.pow(1.3, distanceFactor) * sizeMultiplier);
-                const finalHealth = isGate ? baseHealth * GATE_HEALTH_MULTIPLIER : baseHealth;
                 
                 const square: Square = {
                     id: `${x}-${y}`,
@@ -125,22 +118,21 @@ export const generateMap = (seed: string): Square[] => {
                         height: size === 3 ? 200 : size === 2 ? 200 : 100,
                     },
                     isBoss,
-                    isGate,
-                    gateRequirement,
-                    level,
+                    isGate: false, // We'll set gates later
+                    isPortal: false, // We'll set portals later
+                    level,  // Every square has a defined level
                     adjacentSquares: [],
                     // Apply scaling to health and money based on position, size, and gate status
-                    health: finalHealth,
-                    maxHealth: finalHealth,
+                    health: Math.floor((isBoss ? 1000 : 100) * Math.pow(1.3, distanceFactor) * sizeMultiplier),
+                    maxHealth: Math.floor((isBoss ? 1000 : 100) * Math.pow(1.3, distanceFactor) * sizeMultiplier),
                     moneyPerSecond: Math.floor((isBoss ? 10 : 1) * Math.pow(1.5, distanceFactor) * sizeMultiplier)
                 };
 
-                // Add more variety to treasures
+                // Add treasure with weighted random selection
                 if (rng() < 0.2 && !isBoss) {
                     const treasureTypes = ['damage', 'autoclick', 'coins', 'luck'];
                     const weights = [0.3, 0.3, 0.3, 0.1]; // Luck is more rare
                     
-                    // Weighted random selection
                     const random = rng();
                     let cumulativeWeight = 0;
                     let selectedType = 'coins';
@@ -155,36 +147,106 @@ export const generateMap = (seed: string): Square[] => {
                     
                     // Scale treasure value by level and distance
                     const valueMultiplier = Math.pow(1.2, level - 1);
-                    
-                    // Gates always have a treasure
-                    if (isGate) {
-                        square.treasure = {
-                            type: 'coins',
-                            value: Math.floor(300 * valueMultiplier), // Gates give more coins
-                        };
-                    } else {
-                        square.treasure = {
-                            type: selectedType as 'damage' | 'autoclick' | 'coins' | 'luck',
-                            value: Math.floor((rng() * 100 + 50) * valueMultiplier),
-                        };
-                    }
-                } else if (isGate) {
-                    // Ensure all gates have a coin treasure
-                    const valueMultiplier = Math.pow(1.2, level - 1);
                     square.treasure = {
-                        type: 'coins',
-                        value: Math.floor(300 * valueMultiplier),
+                        type: selectedType as 'damage' | 'autoclick' | 'coins' | 'luck',
+                        value: Math.floor((rng() * 100 + 50) * valueMultiplier),
                     };
                 }
 
                 squares.push(square);
                 squaresByPosition[`${x}-${y}`] = square;
                 squareCount++;
+                
+                // Track squares by level
+                if (!squaresByLevel[level]) {
+                    squaresByLevel[level] = [];
+                }
+                squaresByLevel[level].push(square);
+            }
+        }
+    }
+    
+    // Now place gates at specific positions
+    const gates: Square[] = [];
+    
+    for (const [level, gateX, gateY] of gatePositions) {
+        // Find a square at this position or nearby
+        let gateSquare = squaresByPosition[`${gateX}-${gateY}`];
+        
+        // If position is not available, find the closest square at this level
+        if (!gateSquare || gateSquare.level !== level) {
+            // Find squares at this level
+            const levelSquares = squaresByLevel[level] || [];
+            
+            if (levelSquares.length > 0) {
+                // Sort by distance to the desired gate position
+                levelSquares.sort((a, b) => {
+                    const distA = Math.pow(a.position.x - gateX, 2) + Math.pow(a.position.y - gateY, 2);
+                    const distB = Math.pow(b.position.x - gateX, 2) + Math.pow(b.position.y - gateY, 2);
+                    return distA - distB;
+                });
+                
+                // Pick the closest square
+                gateSquare = levelSquares[0];
+            }
+        }
+        
+        if (gateSquare) {
+            // Convert this square to a gate
+            gateSquare.isGate = true;
+            gateSquare.gateRequirement = calculateGateRequirement(level);
+            
+            // Update health to be higher for gates
+            gateSquare.health = gateSquare.health * GATE_HEALTH_MULTIPLIER;
+            gateSquare.maxHealth = gateSquare.maxHealth * GATE_HEALTH_MULTIPLIER;
+            
+            // Add a coin treasure to the gate
+            const valueMultiplier = Math.pow(1.2, level - 1);
+            gateSquare.treasure = {
+                type: 'coins',
+                value: Math.floor(300 * valueMultiplier),
+            };
+            
+            gates.push(gateSquare);
+        }
+    }
+    
+    // Add portals - one per level except the highest level
+    const portals: Square[] = [];
+    
+    for (let level = 1; level < MAX_LEVEL; level++) {
+        // Get all potential portal squares at this level
+        const levelSquares = squaresByLevel[level] || [];
+        
+        // Find eligible squares (not gates, not bosses)
+        const eligibleSquares = levelSquares.filter(s => !s.isGate && !s.isBoss);
+        
+        if (eligibleSquares.length > 0) {
+            // Find the gate for this level
+            const targetGate = gates.find(g => g.level === level);
+            
+            if (targetGate) {
+                // Choose a random eligible square
+                const portalIndex = Math.floor(rng() * eligibleSquares.length);
+                const portalSquare = eligibleSquares[portalIndex];
+                
+                // Convert this square to a portal
+                portalSquare.isPortal = true;
+                portalSquare.portalTarget = targetGate.id;
+                
+                // Add a coin treasure to the portal
+                const valueMultiplier = Math.pow(1.2, level - 1);
+                portalSquare.treasure = {
+                    type: 'coins',
+                    value: Math.floor(200 * valueMultiplier),
+                };
+                
+                portals.push(portalSquare);
             }
         }
     }
 
-    // Add adjacency information
+    // Add adjacency information with level progression rules
     squares.forEach(square => {
         const { x, y } = square.position;
         const width = square.size.width > 100 ? 2 : 1;
@@ -195,7 +257,22 @@ export const generateMap = (seed: string): Square[] => {
             for (let dx = -1; dx <= width; dx++) {
                 const checkPos = `${x + dx}-${y + dy}`;
                 if (squaresByPosition[checkPos] && checkPos !== `${x}-${y}`) {
-                    square.adjacentSquares.push(squaresByPosition[checkPos].id);
+                    const adjacentSquare = squaresByPosition[checkPos];
+                    
+                    // Enforce level progression - only add adjacency if:
+                    // 1. The squares are at the same level, OR
+                    // 2. The current square is a gate and can reveal the next level, OR
+                    // 3. The current square is a portal and can reveal its target
+                    const squareLevel = square.level || 0;
+                    const adjacentLevel = adjacentSquare.level || 0;
+                    
+                    if (
+                        (squareLevel === adjacentLevel) || 
+                        (square.isGate && adjacentLevel === squareLevel + 1) ||
+                        (square.isPortal && square.portalTarget && adjacentSquare.id === square.portalTarget)
+                    ) {
+                        square.adjacentSquares.push(adjacentSquare.id);
+                    }
                 }
             }
         }
@@ -258,6 +335,18 @@ export const getGateTunnelSquares = (squares: Square[], killedGate: Square): str
         .map(square => square.id);
     
     return tunnelSquares;
+};
+
+// Special function to handle portal activation
+export const getPortalRevealSquares = (squares: Square[], killedPortal: Square): string[] => {
+    if (!killedPortal.isPortal || !killedPortal.portalTarget) return [];
+    
+    // Find the target gate
+    const targetGate = squares.find(s => s.id === killedPortal.portalTarget);
+    if (!targetGate) return [];
+    
+    // Return the target gate ID to be revealed
+    return [targetGate.id];
 };
 
 // Function to check if a player can pass a gate
