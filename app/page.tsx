@@ -68,7 +68,7 @@ export default function Home() {
       let treasureBonus = 0;
       let newClickDamage = prev.clickDamage;
       let newAutoClickDamage = prev.autoClickDamage;
-      let newCoinMultiplier = prev.coinMultiplier || 1;
+      const newCoinMultiplier = prev.coinMultiplier || 1;
       let newLuckMultiplier = prev.luckMultiplier;
 
       if (newStatus === 'dead' && clickedSquare.treasure) {
@@ -92,7 +92,7 @@ export default function Home() {
       }
 
       // Calculate level and update gate progress
-      let newGateProgress = { ...prev.gateProgress };
+      const newGateProgress = { ...prev.gateProgress };
       let newSquaresKilled = prev.squaresKilled;
       
       if (newStatus === 'dead') {
@@ -269,7 +269,7 @@ export default function Home() {
       setGameState((prev: GameState) => {
         if (!prev.squares.length) return prev;
         
-        let newCoins = prev.coins;
+        const newCoins = prev.coins;
         
         // Find the first available square
         const firstAvailable = prev.squares.find(square => 
@@ -288,7 +288,7 @@ export default function Home() {
           const newHealth = Math.max(0, firstAvailable.health - prev.autoClickDamage / 10);
           const newStatus = newHealth <= 0 ? 'dead' as const : 'available' as const;
           
-          let newGateProgress = { ...prev.gateProgress };
+          const newGateProgress = { ...prev.gateProgress };
           let newSquaresKilled = prev.squaresKilled;
           
           if (newStatus === 'dead') {
