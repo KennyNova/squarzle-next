@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import localFont from "next/font/local";
 import "./globals.css";
 
@@ -16,6 +16,14 @@ const geistMono = localFont({
 export const metadata: Metadata = {
   title: "Squarzle",
   description: "Break squares, beat bosses, uncover the map.",
+};
+
+// Edge to edge on notched phones; the HUD pads itself with the safe-area insets
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+  themeColor: "#07050d",
 };
 
 export default function RootLayout({

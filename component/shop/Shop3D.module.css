@@ -26,7 +26,7 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 16px 20px;
+  padding: max(16px, env(safe-area-inset-top)) max(20px, env(safe-area-inset-right)) 16px max(20px, env(safe-area-inset-left));
   background: linear-gradient(180deg, rgba(11, 7, 20, 0.9), transparent);
   pointer-events: none;
 }
@@ -86,11 +86,17 @@
   transition: background 0.15s;
 }
 
-.close:hover { background: rgba(255, 255, 255, 0.18); }
+@media (hover: hover) {
+  .close:hover { background: rgba(255, 255, 255, 0.18); }
+  .tab:hover { color: white; }
+  .arrow:hover { background: rgba(124, 58, 237, 0.7); transform: scale(1.08); }
+  .stripItem:hover { transform: translateY(-2px); }
+  .buy:hover:not(:disabled) { filter: brightness(1.1); transform: translateY(-1px); }
+}
 
 .tabs {
   position: absolute;
-  top: 78px;
+  top: calc(max(16px, env(safe-area-inset-top)) + 62px);
   left: 50%;
   transform: translateX(-50%);
   display: flex;
@@ -113,7 +119,6 @@
   white-space: nowrap;
 }
 
-.tab:hover { color: white; }
 
 .tab[data-active='true'] {
   background: linear-gradient(135deg, #7c3aed, #c026d3);
@@ -147,7 +152,6 @@
   transition: transform 0.15s, background 0.15s;
 }
 
-.arrow:hover { background: rgba(124, 58, 237, 0.7); transform: scale(1.08); }
 .arrow:active { transform: scale(0.94); }
 .arrowLeft { left: 20px; }
 .arrowRight { right: 20px; }
@@ -180,7 +184,7 @@
 .panel {
   position: absolute;
   left: 50%;
-  bottom: 20px;
+  bottom: max(20px, env(safe-area-inset-bottom));
   transform: translateX(-50%);
   width: min(560px, calc(100% - 32px));
   display: grid;
@@ -215,7 +219,6 @@
   transition: transform 0.15s, background 0.15s, border-color 0.15s;
 }
 
-.stripItem:hover { transform: translateY(-2px); }
 
 .stripItem[data-active='true'] {
   background: color-mix(in srgb, var(--accent) 25%, transparent);
@@ -280,7 +283,6 @@
   transition: transform 0.1s, box-shadow 0.1s, filter 0.15s;
 }
 
-.buy:hover:not(:disabled) { filter: brightness(1.1); transform: translateY(-1px); }
 
 .buy:active:not(:disabled) {
   transform: translateY(4px);
@@ -306,21 +308,52 @@
 }
 
 @media (max-width: 639px) {
-  .header { padding: 12px 14px; }
+  .header { padding: max(12px, env(safe-area-inset-top)) 14px 12px; }
   .titleMain { font-size: 20px; }
   .titleSub { display: none; }
-  .tabs { top: 64px; }
-  .tab { padding: 7px 11px; font-size: 13px; }
-  .arrow { width: 42px; height: 42px; font-size: 28px; top: 36%; }
+  .close { width: 44px; height: 44px; }
+  .tabs { top: calc(max(12px, env(safe-area-inset-top)) + 56px); max-width: calc(100% - 24px); }
+  .tab { padding: 9px 11px; font-size: 13px; }
+  .arrow { width: 44px; height: 44px; font-size: 28px; top: 30%; }
   .arrowLeft { left: 10px; }
   .arrowRight { right: 10px; }
   .panel {
     grid-template-columns: 1fr;
     grid-template-areas: 'strip' 'info' 'buy';
-    bottom: 12px;
+    gap: 10px;
+    bottom: max(12px, env(safe-area-inset-bottom));
     padding: 14px;
+    max-height: calc(100% - 140px);
+    overflow-y: auto;
   }
+  .stripItem { width: 42px; height: 42px; }
+  .buy { padding: 14px 18px; }
   .name { font-size: 19px; }
   .description { font-size: 12px; }
-  .toast { font-size: 16px; }
+  .toast { font-size: 16px; top: 22%; max-width: calc(100vw - 32px); white-space: normal; text-align: center; }
+}
+
+/* Landscape phones: the item card sits to the side so the carousel stays visible */
+@media (max-height: 500px) and (orientation: landscape) {
+  .header { padding-top: max(10px, env(safe-area-inset-top)); padding-bottom: 10px; }
+  .titleSub { display: none; }
+  .tabs { top: max(10px, env(safe-area-inset-top)); }
+  .arrow { top: 45%; }
+  .panel {
+    left: auto;
+    right: max(16px, env(safe-area-inset-right));
+    bottom: max(10px, env(safe-area-inset-bottom));
+    transform: none;
+    width: min(340px, 46%);
+    grid-template-columns: 1fr;
+    grid-template-areas: 'strip' 'info' 'buy';
+    gap: 8px;
+    padding: 12px;
+    max-height: calc(100% - 76px);
+    overflow-y: auto;
+  }
+  .arrowRight { right: calc(min(340px, 46%) + 28px); }
+  .stripItem { width: 34px; height: 34px; font-size: 17px; }
+  .name { font-size: 18px; }
+  .description { font-size: 12px; }
 }

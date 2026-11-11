@@ -252,7 +252,9 @@ body { background: #07050d; }
   transition: transform 0.1s, box-shadow 0.1s, filter 0.15s;
 }
 
-.shop-button:hover { filter: brightness(1.1); transform: translateY(-1px); }
+@media (hover: hover) {
+  .shop-button:hover { filter: brightness(1.1); transform: translateY(-1px); }
+}
 .shop-button:active { transform: translateY(4px); box-shadow: 0 1px 0 #581c87; }
 
 .shop-badge {
@@ -296,7 +298,10 @@ body { background: #07050d; }
   background: rgba(255, 255, 255, 0.05);
 }
 
-.menu-item:hover { background: rgba(255, 255, 255, 0.12); }
+@media (hover: hover) {
+  .menu-item:hover { background: rgba(255, 255, 255, 0.12); }
+}
+.menu-item:active { background: rgba(255, 255, 255, 0.16); }
 
 .zone-card { border-color: color-mix(in srgb, var(--zone) 40%, transparent); }
 .zone-accent { color: var(--zone); }
@@ -340,6 +345,19 @@ body { background: #07050d; }
   100% { opacity: 0; transform: translate(-50%, -20px) scale(0.96); }
 }
 
+/* HUD keeps clear of notches and the home indicator */
+.hud-top {
+  padding: max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) 12px max(12px, env(safe-area-inset-left));
+}
+
+.ability-bar { bottom: max(16px, env(safe-area-inset-bottom)); }
+
+@media (min-width: 640px) {
+  .hud-top {
+    padding: max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) 16px max(16px, env(safe-area-inset-left));
+  }
+}
+
 /* Ability bar */
 .ability {
   position: relative;
@@ -357,7 +375,9 @@ body { background: #07050d; }
   overflow: hidden;
 }
 
-.ability:hover { background: rgba(255, 255, 255, 0.12); transform: translateY(-2px); }
+@media (hover: hover) {
+  .ability:hover { background: rgba(255, 255, 255, 0.12); transform: translateY(-2px); }
+}
 .ability:active { transform: translateY(1px) scale(0.96); }
 .ability[data-empty='true'] > .text-2xl { filter: grayscale(1); opacity: 0.45; }
 
@@ -408,7 +428,32 @@ body { background: #07050d; }
 }
 
 @media (max-width: 639px) {
-  .ability { width: 56px; height: 56px; }
-  .shop-button { padding: 9px 13px; font-size: 14px; }
-  .hud-icon-button { width: 42px; height: 42px; }
+  .ability { width: 58px; height: 58px; }
+  .ability-bar { bottom: max(10px, env(safe-area-inset-bottom)); }
+  .shop-button { padding: 10px 13px; font-size: 14px; gap: 6px; }
+  .hud-icon-button { width: 44px; height: 44px; }
+  .stat-chip { padding: 2px 6px; }
+  .menu-item { padding: 11px 12px; }
+}
+
+/* Very narrow phones: the shop button drops its label */
+@media (max-width: 359px) {
+  .shop-button > span:nth-child(2) { display: none; }
+}
+
+/* Landscape phones: one HUD row and tighter chrome so the board keeps some room */
+@media (max-height: 500px) and (orientation: landscape) {
+  .hud-top {
+    padding: max(8px, env(safe-area-inset-top)) max(8px, env(safe-area-inset-right)) 8px max(8px, env(safe-area-inset-left));
+  }
+  .hud-coins { flex: none; }
+  .hud-zone { order: 0; width: auto; flex: 1; min-width: 0; }
+  .hud-zone > .zone-card { width: min(420px, 100%); }
+  .ability { width: 50px; height: 50px; }
+  .ability-bar { bottom: max(8px, env(safe-area-inset-bottom)); }
+}
+
+/* Touch screens have no keyboard hints */
+@media (hover: none) {
+  .ability-key { display: none; }
 }
