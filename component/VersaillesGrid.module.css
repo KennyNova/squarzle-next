@@ -4,6 +4,8 @@
   inset: 0;
   overflow: hidden;
   touch-action: none;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
 }
 
 .gridContainer[data-panning] { cursor: grabbing; }
@@ -303,7 +305,9 @@
   transition: transform 0.15s ease, background 0.15s ease;
 }
 
-.controlButton:hover { background: rgba(88, 28, 135, 0.85); transform: scale(1.06); }
+@media (hover: hover) {
+  .controlButton:hover { background: rgba(88, 28, 135, 0.85); transform: scale(1.06); }
+}
 .controlButton:active { transform: scale(0.94); }
 
 .controlIcon { width: 20px; height: 20px; }
@@ -315,6 +319,14 @@
     --pad: 16px;
   }
 
-  .gridControls { bottom: 92px; right: 10px; }
+  .gridControls { bottom: calc(max(10px, env(safe-area-inset-bottom)) + 84px); right: max(10px, env(safe-area-inset-right)); }
+  .controlButton { width: 40px; height: 40px; }
+  .tooltip { max-width: min(300px, calc(100vw - 32px)); }
+}
+
+/* Landscape phones: the controls stack beside the ability bar instead of above it */
+@media (max-height: 500px) and (orientation: landscape) {
+  .gridControls { bottom: max(8px, env(safe-area-inset-bottom)); right: max(10px, env(safe-area-inset-right)); }
   .controlButton { width: 38px; height: 38px; }
+  .gridControls { gap: 6px; }
 }

@@ -115,6 +115,7 @@ export default function Home() {
   const [now, setNow] = useState(() => Date.now());
   const [coinBump, setCoinBump] = useState(0);
   const effectId = useRef(0);
+  const menuRef = useRef<HTMLDivElement>(null);
 
   // Every state change goes through here so intervals and clicks never read stale state
   const commit = useCallback((next: GameState) => {
@@ -402,6 +403,16 @@ export default function Home() {
     return () => window.removeEventListener('keydown', onKey);
   }, [isShopOpen, activateAbility, setArmedMode]);
 
+  // Tapping or clicking anywhere outside the menu closes it
+  useEffect(() => {
+    if (!isMenuOpen) return;
+    const onDown = (event: PointerEvent) => {
+      if (!menuRef.current?.contains(event.target as Node)) setIsMenuOpen(false);
+    };
+    window.addEventListener('pointerdown', onDown);
+    return () => window.removeEventListener('pointerdown', onDown);
+  }, [isMenuOpen]);
+
   const handlePurchase = useCallback((item: ShopItem) => {
     const state = stateRef.current;
     if (!state) return null;
@@ -461,14 +472,15 @@ export default function Home() {
             <DialogTitle className="text-2xl font-black">Welcome to Squarzle</DialogTitle>
           </DialogHeader>
           <ul className="space-y-3 text-sm text-white/80">
-            <li className="flex gap-3"><span className="text-xl">👆</span><span>Click glowing squares to break them. Each one you break drops coins and opens up its neighbours.</span></li>
+            <li className="flex gap-3"><span className="text-xl">👆</span><span>Tap or click glowing squares to break them. Each one you break drops coins and opens up its neighbours.</span></li>
             <li className="flex gap-3"><span className="text-xl">🌫️</span><span>You start in a small zone. Everything else is hidden in fog.</span></li>
             <li className="flex gap-3"><span className="text-xl">{themes[0].bossEmoji}</span><span>Each zone has a 👑 boss guarding the way on. Break enough squares to wake it, then beat it to reveal the next zone.</span></li>
             <li className="flex gap-3"><span className="text-xl">🗺️</span><span>Want a different world? Open the map creator from the ☰ menu and build your own.</span></li>
             <li className="flex gap-3"><span className="text-xl">💰</span><span>Spend coins in the Bazaar on upgrades, drones, bombs and potions.</span></li>
             <li className="flex gap-3"><span className="text-xl">🌀</span><span>Hidden portals wake a boss early. Treasure squares give permanent boosts.</span></li>
           </ul>
-          <p className="text-xs text-white/50">Hotkeys: 1–4 use gadgets · S opens the shop · progress saves automatically</p>
+          <p className="text-xs text-white/50 [@media(hover:none)]:hidden">Hotkeys: 1–4 use gadgets · S opens the shop · progress saves automatically</p>
+          <p className="hidden text-xs text-white/50 [@media(hover:none)]:block">Drag to move the board · pinch to zoom · hold an icon to see what it is</p>
           <div className="flex justify-end">
             <button
               className="rounded-xl bg-gradient-to-br from-violet-500 to-fuchsia-600 px-6 py-3 font-black shadow-[0_5px_0_#4c1d95] active:translate-y-1 active:shadow-none transition"
@@ -546,14 +558,14 @@ export default function Home() {
         {midasLeft > 0 && <div className="pointer-events-none absolute inset-0 midas-vignette" />}
 
         {/* Top HUD */}
-        <header className="pointer-events-none absolute inset-x-0 top-0 z-20 p-3 sm:p-4">
-          <div className="flex flex-wrap items-start gap-3">
-            <div className="pointer-events-auto hud-panel flex flex-col gap-2 px-4 py-3">
+        <header data-hud="top" className="hud-top pointer-events-none absolute inset-x-0 top-0 z-20">
+          <div className="flex flex-wrap items-start gap-2 sm:gap-3">
+            <div className="hud-coins pointer-events-auto hud-panel flex min-w-0 flex-1 flex-col gap-1.5 px-3 py-2 sm:gap-2 sm:px-4 sm:py-3 md:flex-none">
               <div key={coinBump} className="coin-bump flex items-center gap-2 text-2xl sm:text-3xl font-black tabular-nums text-amber-200">
                 <span className="coin-icon" />
                 {formatNumber(gameState.coins)}
               </div>
-              <div className="flex flex-wrap gap-1.5 text-xs font-bold">
+              <div className="flex flex-wrap gap-1 text-[11px] font-bold sm:gap-1.5 sm:text-xs">
                 <span className="stat-chip" title="Click damage">🗡️ {formatNumber(gameState.clickDamage)}</span>
                 <span className="stat-chip" title="Auto damage per second">⚙️ {formatNumber(gameState.autoClickDamage)}/s</span>
                 <span className="stat-chip" title="Crit chance">🎯 {Math.round(gameState.critChance * 100)}%</span>
@@ -564,8 +576,8 @@ export default function Home() {
             </div>
 
             {/* Zone objective */}
-            <div className="order-last w-full flex justify-center md:order-none md:w-auto md:flex-1">
-              <div className="pointer-events-auto hud-panel zone-card px-4 py-2.5 w-[min(420px,100%)]">
+            <div className="hud-zone order-last w-full flex justify-center md:order-none md:w-auto md:flex-1">
+              <div className="pointer-events-auto hud-panel zone-card px-3 py-2 sm:px-4 sm:py-2.5 w-full md:w-[min(420px,100%)]">
                 <div className="flex items-baseline justify-between gap-2">
                   <span className="text-[11px] font-black uppercase tracking-[0.2em] zone-accent">Zone {zone} / {gameState.zoneCount}</span>
                   <span className="text-sm font-black truncate">{zoneInfo.name}</span>
@@ -597,10 +609,10 @@ export default function Home() {
                 <span>Shop</span>
                 {affordableCount > 0 && <span className="shop-badge">{affordableCount}</span>}
               </button>
-              <div className="pointer-events-auto relative">
-                <button className="hud-icon-button" onClick={() => setIsMenuOpen(open => !open)} aria-label="Game menu">☰</button>
+              <div ref={menuRef} className="pointer-events-auto relative">
+                <button className="hud-icon-button" onClick={() => setIsMenuOpen(open => !open)} aria-label="Game menu" aria-expanded={isMenuOpen}>☰</button>
                 {isMenuOpen && (
-                  <div className="hud-panel absolute right-0 top-12 w-56 p-3 text-sm space-y-2">
+                  <div className="hud-panel absolute right-0 top-12 z-10 w-56 p-3 text-sm space-y-2">
                     <p className="text-white/50 text-xs truncate">
                       {layoutNames[gameState.map.layout]} {gameState.map.width}×{gameState.map.height} · seed {gameState.seed}
                     </p>
@@ -625,7 +637,7 @@ export default function Home() {
         )}
 
         {/* Ability bar */}
-        <div className="absolute bottom-4 left-1/2 z-20 -translate-x-1/2 flex gap-2 hud-panel p-2">
+        <div data-hud="bottom" className="ability-bar absolute left-1/2 z-20 -translate-x-1/2 flex gap-1.5 sm:gap-2 hud-panel p-1.5 sm:p-2">
           {ABILITIES.map(ability => {
             const count = gameState.inventory[ability.id];
             const remaining = ability.id === 'frenzy' ? frenzyLeft : ability.id === 'midas' ? midasLeft : 0;

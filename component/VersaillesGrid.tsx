@@ -48,13 +48,28 @@ interface VersaillesGridProps {
 const PAN_THRESHOLD = 10;
 const PAN_THRESHOLD_ON_SQUARE = 22;
 
-// Screen space the camera keeps clear for the HUD (px)
+// Screen space the camera keeps clear for the HUD (px), used until the HUD can be measured
 const HUD_TOP = 120;
-const HUD_TOP_MOBILE = 200;
 const HUD_BOTTOM = 100;
+const HUD_GAP = 10;
 const SIDE_MARGIN = 16;
 const MIN_SCALE = 0.1; // Big maps need to fit on screen
 const MAX_FIT_SCALE = 1.3; // Small zones shouldn't fill the screen with giant stones
+const MIN_TOUCH_CELL = 34; // On touch screens a stone never fits smaller than a fingertip (px)
+const LONG_PRESS_MS = 420;
+
+// How much of the board's box the top HUD and the ability bar cover right now
+const hudInsets = (box: HTMLElement) => {
+  const rect = box.getBoundingClientRect();
+  const top = document.querySelector('[data-hud="top"]')?.getBoundingClientRect().bottom;
+  const bottom = document.querySelector('[data-hud="bottom"]')?.getBoundingClientRect().top;
+  return {
+    top: top === undefined ? HUD_TOP : Math.max(0, top - rect.top) + HUD_GAP,
+    bottom: bottom === undefined ? HUD_BOTTOM : Math.max(0, rect.bottom - bottom) + HUD_GAP,
+  };
+};
+
+const isTouchScreen = () => window.matchMedia('(pointer: coarse)').matches;
 
 // Grid cells to CSS lengths, used for the frame, the label and the camera
 const cellsSpan = (cells: number) => `calc(${cells} * var(--cell) + ${Math.max(0, cells - 1)} * var(--gap))`;
@@ -133,14 +148,34 @@ export default function VersaillesGrid({
     const transform = transformRef.current;
     const camera = cameraRef.current;
     const box = containerRef.current;
-    if (!transform || !camera || !box || !camera.offsetWidth) return;
-    const hudTop = box.clientWidth < 768 ? HUD_TOP_MOBILE : HUD_TOP;
+    const grid = camera?.parentElement;
+    if (!transform || !camera || !box || !grid || !camera.offsetWidth) return;
+    const hud = hudInsets(box);
     const availableWidth = box.clientWidth - 2 * SIDE_MARGIN;
-    const availableHeight = Math.max(100, box.clientHeight - hudTop - HUD_BOTTOM);
-    const scale = Math.min(MAX_FIT_SCALE, Math.max(MIN_SCALE,
+    const availableHeight = Math.max(100, box.clientHeight - hud.top - hud.bottom);
+    let scale = Math.min(MAX_FIT_SCALE, Math.max(MIN_SCALE,
       Math.min(availableWidth / camera.offsetWidth, availableHeight / camera.offsetHeight)));
-    const x = (box.clientWidth - camera.offsetWidth * scale) / 2 - camera.offsetLeft * scale;
-    const y = hudTop + (availableHeight - camera.offsetHeight * scale) / 2 - camera.offsetTop * scale;
+    let focus = { left: camera.offsetLeft, top: camera.offsetTop, width: camera.offsetWidth, height: camera.offsetHeight };
+
+    // Fitting a whole zone on a phone can shrink stones below a fingertip. Zoom in to a
+    // tappable size instead and centre on the stones that can be broken right now.
+    const cell = parseFloat(getComputedStyle(grid).getPropertyValue('--cell')) || 0;
+    if (cell && isTouchScreen() && scale * cell < MIN_TOUCH_CELL) {
+      scale = MIN_TOUCH_CELL / cell;
+      const open = Array.from(grid.querySelectorAll<HTMLElement>('[data-status="available"]'))
+        .map(square => square.closest<HTMLElement>('[data-id]'))
+        .filter((cellElement): cellElement is HTMLElement => !!cellElement);
+      if (open.length) {
+        const left = Math.min(...open.map(c => c.offsetLeft));
+        const top = Math.min(...open.map(c => c.offsetTop));
+        const right = Math.max(...open.map(c => c.offsetLeft + c.offsetWidth));
+        const bottom = Math.max(...open.map(c => c.offsetTop + c.offsetHeight));
+        focus = { left, top, width: right - left, height: bottom - top };
+      }
+    }
+
+    const x = (box.clientWidth - focus.width * scale) / 2 - focus.left * scale;
+    const y = hud.top + (availableHeight - focus.height * scale) / 2 - focus.top * scale;
     transform.setTransform(x, y, scale, animationTime, 'easeInOutQuad');
   }, []);
 
@@ -186,14 +221,50 @@ export default function VersaillesGrid({
     const pointers = new Set<number>();
     let drag: { id: number; startX: number; startY: number; lastX: number; lastY: number; threshold: number; panning: boolean } | null = null;
     let suppressClick = false;
+    let pressTimer: ReturnType<typeof setTimeout> | undefined;
+    let pressTipShown = false;
+
+    const cancelPress = () => {
+      clearTimeout(pressTimer);
+      pressTimer = undefined;
+    };
+
+    // Touch has no hover, so holding a finger on an emoji shows its tooltip instead of hitting it
+    const startPress = (event: PointerEvent) => {
+      const tipElement = (event.target as HTMLElement).closest<HTMLElement>('[data-tip]');
+      const id = tipElement?.closest<HTMLElement>('[data-id]')?.dataset.id;
+      const tip = tipElement?.dataset.tip as TipKind | undefined;
+      if (!id || !tip) return;
+      const { clientX, clientY } = event;
+      pressTimer = setTimeout(() => {
+        pressTimer = undefined;
+        pressTipShown = true;
+        suppressClick = true;
+        setHovered({ id, tip });
+        if (tooltipRef.current) {
+          // Centred across the screen, above the finger unless that runs off the top
+          const above = clientY > 180;
+          tooltipRef.current.style.transform =
+            `translate(calc(50vw - 50%), calc(${clientY + (above ? -36 : 36)}px - ${above ? '100%' : '0%'}))`;
+        }
+      }, LONG_PRESS_MS);
+    };
 
     const onDown = (event: PointerEvent) => {
       pointers.add(event.pointerId);
+      // A long press may never produce a click, so its suppression can't outlive the gesture
+      suppressClick = false;
+      cancelPress();
+      if (pressTipShown) {
+        pressTipShown = false;
+        setHovered(null);
+      }
       if (pointers.size > 1) {
         drag = null; // second finger: leave it to pinch-zoom
         return;
       }
       if (event.button !== 0 || (event.target as HTMLElement).closest('button')) return;
+      if (event.pointerType !== 'mouse') startPress(event);
       const onSquare = !!(event.target as HTMLElement).closest('[data-id]');
       drag = {
         id: event.pointerId,
@@ -210,6 +281,7 @@ export default function VersaillesGrid({
       if (!drag || event.pointerId !== drag.id || !transformRef.current) return;
       if (!drag.panning) {
         if (Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY) < drag.threshold) return;
+        cancelPress();
         drag.panning = true;
         drag.lastX = event.clientX;
         drag.lastY = event.clientY;
@@ -225,6 +297,7 @@ export default function VersaillesGrid({
 
     const onUp = (event: PointerEvent) => {
       pointers.delete(event.pointerId);
+      cancelPress();
       if (drag && event.pointerId === drag.id) {
         if (drag.panning) suppressClick = true;
         drag = null;
@@ -239,17 +312,23 @@ export default function VersaillesGrid({
       event.preventDefault();
     };
 
+    // Holding a finger on the board shouldn't pop up the browser's own menu
+    const onContextMenu = (event: MouseEvent) => event.preventDefault();
+
     container.addEventListener('pointerdown', onDown);
     window.addEventListener('pointermove', onMove);
     window.addEventListener('pointerup', onUp);
     window.addEventListener('pointercancel', onUp);
     container.addEventListener('click', onClickCapture, true);
+    container.addEventListener('contextmenu', onContextMenu);
     return () => {
+      cancelPress();
       container.removeEventListener('pointerdown', onDown);
       window.removeEventListener('pointermove', onMove);
       window.removeEventListener('pointerup', onUp);
       window.removeEventListener('pointercancel', onUp);
       container.removeEventListener('click', onClickCapture, true);
+      container.removeEventListener('contextmenu', onContextMenu);
     };
   }, []);
 
@@ -358,7 +437,7 @@ export default function VersaillesGrid({
       ref={containerRef}
       className={`${styles.gridContainer} ${shaking ? styles.shake : ''}`}
       onPointerMove={handlePointerMove}
-      onPointerLeave={() => setHovered(null)}
+      onPointerLeave={event => { if (event.pointerType === 'mouse') setHovered(null); }}
     >
       <TransformWrapper
         ref={transformRef}

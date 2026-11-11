@@ -142,7 +142,7 @@ export default function MapCreator({ initial, canClose, runInProgress, onPlay, o
   return (
     <div className="fixed inset-0 z-[70] flex flex-col bg-[#0b0714] text-white md:flex-row">
       {/* Live preview */}
-      <section className="relative flex min-h-[48vh] flex-1 flex-col p-3 md:p-6">
+      <section className="relative flex min-h-[44dvh] flex-1 flex-col p-3 pt-[max(0.75rem,env(safe-area-inset-top))] md:p-6">
         <div className="flex items-center justify-between gap-3">
           <h2 className="text-xl font-black md:text-2xl">🗺️ Map creator</h2>
           {canClose && (
@@ -172,8 +172,8 @@ export default function MapCreator({ initial, canClose, runInProgress, onPlay, o
       </section>
 
       {/* Controls */}
-      <aside className="flex max-h-[52vh] w-full flex-col border-t border-white/10 bg-[#140e22] md:max-h-none md:w-[380px] md:border-l md:border-t-0">
-        <div className="flex-1 space-y-5 overflow-y-auto p-4">
+      <aside className="flex max-h-[56dvh] w-full flex-col border-t border-white/10 bg-[#140e22] md:max-h-none md:w-[380px] md:border-l md:border-t-0">
+        <div className="flex-1 space-y-5 overflow-y-auto overscroll-contain p-4">
           <div>
             <h3 className={styles.heading}>Presets</h3>
             <div className="grid grid-cols-3 gap-1.5">
@@ -313,7 +313,7 @@ export default function MapCreator({ initial, canClose, runInProgress, onPlay, o
             Playing a new map replaces your current run.
           </p>
         )}
-        <div className="flex gap-2 border-t border-white/10 p-3">
+        <div className="flex gap-2 border-t border-white/10 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
           {canClose && (
             <button className="hidden rounded-xl bg-white/10 px-4 py-3 font-bold hover:bg-white/15 md:block" onClick={onClose}>
               Cancel

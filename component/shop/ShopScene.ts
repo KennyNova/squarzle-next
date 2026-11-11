@@ -29,6 +29,8 @@ interface CoinParticle {
 
 const BACKGROUND = 0x0b0714;
 const ITEM_HEIGHT = 1.55;
+const BASE_FOV = 38;
+const MIN_HORIZONTAL_FOV = 42; // What a portrait screen still has to show side to side (degrees)
 
 const material = (color: number, options: Partial<THREE.MeshStandardMaterialParameters> = {}) =>
   new THREE.MeshStandardMaterial({
@@ -248,7 +250,7 @@ const disposeObject = (object: THREE.Object3D) => {
 export class ShopScene {
   private renderer: THREE.WebGLRenderer;
   private scene = new THREE.Scene();
-  private camera = new THREE.PerspectiveCamera(38, 1, 0.1, 60);
+  private camera = new THREE.PerspectiveCamera(BASE_FOV, 1, 0.1, 60);
   private carousel = new THREE.Group();
   private slots: Slot[] = [];
   private radius = 3;
@@ -323,7 +325,8 @@ export class ShopScene {
 
     // A ring of neon pillars in the background
     for (let i = 0; i < 14; i++) {
-      const angle = (i / 14) * Math.PI * 2;
+      // Half a step round so no pillar sits on the camera
+      const angle = ((i + 0.5) / 14) * Math.PI * 2;
       const pillar = new THREE.Group();
       pillar.add(new THREE.Mesh(new THREE.BoxGeometry(0.5, 7, 0.5), new THREE.MeshStandardMaterial({ color: 0x1a1230, roughness: 0.8 })));
       const strip = new THREE.Mesh(new THREE.BoxGeometry(0.06, 6.5, 0.52), new THREE.MeshBasicMaterial({ color: i % 2 ? 0xa855f7 : 0x22d3ee }));
@@ -460,12 +463,18 @@ export class ShopScene {
   }
 
   private resize() {
-    const { clientWidth, clientHeight } = this.container;
-    if (!clientWidth || !clientHeight) return;
-    this.renderer.setSize(clientWidth, clientHeight);
-    this.camera.aspect = clientWidth / clientHeight;
-    // Pull back on narrow screens so neighbours stay in view
-    this.camera.position.z = clientWidth < clientHeight ? 10.5 : 8;
+    const { clientWidth: width, clientHeight: height } = this.container;
+    if (!width || !height) return;
+    this.renderer.setSize(width, height);
+    this.camera.aspect = width / height;
+    // Narrow screens widen the lens so neighbours stay in view. Backing the camera out
+    // instead would put it behind the pillar ring.
+    const fitFov = THREE.MathUtils.radToDeg(2 * Math.atan(Math.tan(THREE.MathUtils.degToRad(MIN_HORIZONTAL_FOV / 2)) / this.camera.aspect));
+    this.camera.fov = Math.min(80, Math.max(BASE_FOV, fitFov));
+    // Keep the carousel clear of the item card: above it on phones, beside it on landscape phones
+    const portrait = width < height;
+    const shortLandscape = !portrait && height <= 500;
+    this.camera.setViewOffset(width, height, shortLandscape ? width * 0.22 : 0, portrait ? height * 0.12 : 0, width, height);
     this.camera.updateProjectionMatrix();
   }
 
