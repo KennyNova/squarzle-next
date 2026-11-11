@@ -1,358 +1,293 @@
 // utils/gameLogic.ts
-import { Square, GameState } from '@/types/game';
-import seedrandom from 'seedrandom';
+import { Square, GameState, GameEvent, TreasureType, MapConfig } from '@/types/game';
+import { generateMap } from '@/utils/mapGen';
 
-// Fixed grid dimensions - we now use zoom/pan instead of responsive sizing
-const GRID_WIDTH = 15;
-const GRID_HEIGHT = 15;
+const MAX_ADJACENT_REVEALED = 3; // Squares revealed after a normal kill
+const CRIT_MULTIPLIER = 3;
+const FRENZY_MULTIPLIER = 3;
+const MIDAS_MULTIPLIER = 2;
+const JACKPOT_MULTIPLIER = 5;
 
-// Constants for game mechanics
-const MAX_ADJACENT_REVEALED = 3; // Maximum squares to reveal after killing one
-const GATE_REQUIREMENT_BASE = 5; // Base number of squares to kill at each gate
-const GATE_HEALTH_MULTIPLIER = 5; // Gates have 5x more health than normal squares
-const GATE_AUTO_CLEAR_COUNT = 7; // Number of squares to auto-clear when a gate is destroyed
-const MAX_LEVEL = 6; // Maximum number of levels in the game
-
-// Helper function to calculate level based on distance from origin
-const calculateLevel = (x: number, y: number): number => {
-    const distanceFromOrigin = Math.sqrt(x*x + y*y);
-    // Use smaller level sizes to ensure more distinct levels
-    return Math.min(MAX_LEVEL, Math.floor(distanceFromOrigin / 3) + 1);
+export const createInitialState = (config: MapConfig): GameState => {
+    const map = generateMap(config);
+    return {
+        map: map.config,
+        zoneCount: map.zoneCount,
+        startId: map.startId,
+        squares: map.squares,
+        clickDamage: 10,
+        coins: 0,
+        autoClickDamage: 0,
+        seed: map.config.seed,
+        coinMultiplier: 1,
+        luckMultiplier: 1,
+        squaresKilled: 0,
+        gateProgress: {},
+        lifetimeEarnings: 0,
+        unlockedZone: 1,
+        critChance: 0.05,
+        drones: 0,
+        hasRadar: false,
+        inventory: { bomb: 1, lightning: 0, frenzy: 0, midas: 0 },
+        buffs: { frenzyUntil: 0, midasUntil: 0 },
+        purchases: {},
+        won: false,
+    };
 };
 
-// Calculate gate requirement based on gate level
-const calculateGateRequirement = (gateLevel: number): number => {
-    // First gate requires 5 kills, then increases by 2 each gate
-    return GATE_REQUIREMENT_BASE + (gateLevel - 1) * 2;
+// A zone boss stays sealed until enough of its zone has been cleared
+export const isSealed = (square: Square, gateProgress: GameState['gateProgress']): boolean => {
+    if (!square.isGate || square.status === 'dead' || !square.level) return false;
+    return (gateProgress[square.level] || 0) < (square.gateRequirement || 0);
 };
 
-export const generateMap = (seed: string): Square[] => {
-    const rng = seedrandom(seed);
-    const squares: Square[] = [];
+export const canPassGate = (square: Square, gateProgress: GameState['gateProgress']): boolean =>
+    !isSealed(square, gateProgress);
 
-    // Use fixed dimensions for the grid
-    const dimensions = { width: GRID_WIDTH, height: GRID_HEIGHT };
-    
-    // Create a template based on the seed
-    const template = Array(dimensions.height).fill(0).map(() => Array(dimensions.width).fill(0));
-    
-    // Base positions for 2x2 squares (bosses)
-    const baseLargeSquarePositions = [
-        [0, 0], [0, 4], [0, 8],
-        [4, 2], [4, 6], [4, 10],
-        [8, 0], [8, 4], [8, 8],
-        [12, 2], [12, 6],
-    ];
-    
-    // Limit the number of large squares 
-    const maxLargeSquares = Math.max(1, Math.floor(dimensions.width * dimensions.height / 25));
-    const selectedLargeSquares = baseLargeSquarePositions.slice(0, maxLargeSquares);
+// Squares that auto attacks, drones and lightning are allowed to hit
+export const attackableSquares = (state: GameState): Square[] =>
+    state.squares.filter(s =>
+        s.status === 'available' &&
+        (s.level || 1) <= state.unlockedZone &&
+        !isSealed(s, state.gateProgress));
 
-    selectedLargeSquares.forEach(([y, x]) => {
-        if (y < dimensions.height - 1 && x < dimensions.width - 1) {
-            template[y][x] = 2; // 2 means 2x2 square
-            template[y][x + 1] = -1;
-            template[y + 1][x] = -1;
-            template[y + 1][x + 1] = -1;
+export const zoneBoss = (state: GameState, zone: number): Square | undefined =>
+    state.squares.find(s => s.isGate && s.level === zone);
+
+const shuffle = <T,>(items: T[], rng: () => number): T[] => {
+    const copy = [...items];
+    for (let i = copy.length - 1; i > 0; i--) {
+        const j = Math.floor(rng() * (i + 1));
+        [copy[i], copy[j]] = [copy[j], copy[i]];
+    }
+    return copy;
+};
+
+const treasureLabel = (type: TreasureType) => {
+    switch (type) {
+        case 'damage': return '💪 Power up!';
+        case 'autoclick': return '🤖 Auto up!';
+        case 'luck': return '🍀 Luck up!';
+        case 'coins': return '💰 Treasure!';
+    }
+};
+
+export interface DamageResult {
+    state: GameState;
+    events: GameEvent[];
+}
+
+// Applies damage to one square and resolves everything a kill triggers:
+// coins, treasure, reveals, boss wake-ups, zone unlocks and victory.
+export const applyDamage = (
+    state: GameState,
+    squareId: string,
+    baseDamage: number,
+    source: 'click' | 'auto' | 'drone' | 'bomb' | 'lightning',
+    now: number,
+    rng: () => number = Math.random,
+): DamageResult => {
+    const target = state.squares.find(s => s.id === squareId);
+    if (!target || target.status !== 'available' || (target.level || 1) > state.unlockedZone) {
+        return { state, events: [] };
+    }
+
+    const zone = target.level || 1;
+    if (isSealed(target, state.gateProgress)) {
+        return {
+            state,
+            events: [{
+                type: 'sealed',
+                squareId,
+                progress: state.gateProgress[zone] || 0,
+                requirement: target.gateRequirement || 0,
+            }],
+        };
+    }
+
+    const events: GameEvent[] = [];
+    const canCrit = source === 'click' || source === 'drone';
+    const crit = canCrit && rng() < state.critChance;
+    const frenzy = now < state.buffs.frenzyUntil;
+    const damage = baseDamage * (crit ? CRIT_MULTIPLIER : 1) * (frenzy ? FRENZY_MULTIPLIER : 1);
+    const newHealth = Math.max(0, target.health - damage);
+
+    if (source !== 'auto') {
+        events.push({ type: 'hit', squareId, amount: damage, crit, source });
+    }
+
+    if (newHealth > 0) {
+        return {
+            state: {
+                ...state,
+                squares: state.squares.map(s => s.id === squareId ? { ...s, health: newHealth } : s),
+            },
+            events,
+        };
+    }
+
+    // --- The square died ---
+    let next: GameState = { ...state, inventory: { ...state.inventory }, gateProgress: { ...state.gateProgress } };
+    const statusUpdates: { [id: string]: Partial<Square> } = { [squareId]: { health: 0, status: 'dead' } };
+
+    const midas = now < state.buffs.midasUntil;
+    const jackpot = rng() < Math.max(0, state.luckMultiplier - 1) * 0.2;
+    let coins = target.moneyPerSecond * (state.coinMultiplier || 1) * (midas ? MIDAS_MULTIPLIER : 1)
+        * (jackpot ? JACKPOT_MULTIPLIER : 1);
+
+    if (target.treasure) {
+        const scaled = target.treasure.value * state.luckMultiplier;
+        switch (target.treasure.type) {
+            case 'damage':
+                next.clickDamage += Math.max(2, Math.round(next.clickDamage * scaled / 100));
+                break;
+            case 'autoclick':
+                next.autoClickDamage += Math.max(3, Math.round(next.autoClickDamage * scaled / 100));
+                break;
+            case 'luck':
+                next.luckMultiplier = +(next.luckMultiplier + scaled / 100).toFixed(2);
+                break;
+            case 'coins':
+                coins += scaled * (midas ? MIDAS_MULTIPLIER : 1);
+                break;
         }
+        events.push({ type: 'treasure', squareId, label: treasureLabel(target.treasure.type) });
+    }
+
+    coins = Math.floor(coins);
+    next.coins += coins;
+    next.lifetimeEarnings += coins;
+    next.squaresKilled += 1;
+    events.push({ type: 'kill', squareId, coins, jackpot });
+
+    const boss = zoneBoss(state, zone);
+    const wasSealed = boss ? isSealed(boss, state.gateProgress) : false;
+    if (!target.isGate) {
+        next.gateProgress[zone] = (next.gateProgress[zone] || 0) + 1;
+    }
+
+    // Reveal a few locked neighbours inside the unlocked zones
+    const lockedNeighbours = target.adjacentSquares
+        .map(id => state.squares.find(s => s.id === id)!)
+        .filter(s => s && s.status === 'locked' && (s.level || 1) <= state.unlockedZone);
+    shuffle(lockedNeighbours, rng).slice(0, MAX_ADJACENT_REVEALED).forEach(s => {
+        statusUpdates[s.id] = { status: 'available' };
     });
 
-    // Place 1x2 vertical rectangles based on available space
-    for (let y = 0; y < dimensions.height - 1; y++) {
-        for (let x = 0; x < dimensions.width; x++) {
-            if (template[y][x] === 0 && template[y + 1][x] === 0 && rng() > 0.8) {
-                template[y][x] = 3; // 3 means 1x2 vertical rectangle
-                template[y + 1][x] = -1;
-            }
+    if (target.isPortal && target.portalTarget) {
+        statusUpdates[target.portalTarget] = { status: 'available', gateRequirement: 0 };
+        events.push({ type: 'portal', zone });
+    } else if (boss && wasSealed && !target.isGate && !isSealed(boss, next.gateProgress)) {
+        events.push({ type: 'bossAwake', zone });
+    }
+
+    if (target.isGate) {
+        // Any portal leading to this boss is now pointless
+        state.squares
+            .filter(s => s.isPortal && s.portalTarget === target.id)
+            .forEach(s => { statusUpdates[s.id] = { ...statusUpdates[s.id], isPortal: false, portalTarget: undefined }; });
+
+        if (zone >= state.zoneCount) {
+            next.won = true;
+            events.push({ type: 'victory' });
+        } else {
+            next.unlockedZone = Math.max(next.unlockedZone, zone + 1);
+            // Breaking the boss opens the whole border it touches
+            target.adjacentSquares
+                .map(id => state.squares.find(s => s.id === id)!)
+                .filter(s => s && s.status === 'locked' && s.level === zone + 1)
+                .forEach(s => { statusUpdates[s.id] = { status: 'available' }; });
+            events.push({ type: 'zoneUnlocked', zone: zone + 1 });
         }
     }
 
-    // Create a map to store squares by position for adjacency checks
-    const squaresByPosition: { [key: string]: Square } = {};
-    
-    // Fill remaining spaces with 1x1 squares
-    let squareCount = 0;
-    
-    // Pre-define fixed gate positions for each level transition
-    // Format: [level, x, y]
-    const gatePositions = [
-        [1, 4, 3],  // Level 1 to 2
-        [2, 7, 5],  // Level 2 to 3
-        [3, 10, 7], // Level 3 to 4
-        [4, 12, 9], // Level 4 to 5
-        [5, 13, 11] // Level 5 to 6
-    ];
-    
-    // Track squares by level
-    const squaresByLevel: { [level: number]: Square[] } = {};
-    
-    // Process all squares first without gates or portals
-    for (let y = 0; y < dimensions.height; y++) {
-        for (let x = 0; x < dimensions.width; x++) {
-            if (template[y][x] >= 0) {
-                const size = template[y][x];
-                // Adjust boss frequency based on grid size
-                const bossDivisor = Math.max(5, Math.floor(dimensions.width * dimensions.height / 30));
-                const isBoss = (squareCount + 1) % bossDivisor === 0;
-                
-                // Determine if this square should be initially available
-                // Make the top-left square available to start
-                const isInitialSquare = x === 0 && y === 0;
-                
-                // Calculate difficulty and rewards based on distance from origin and size
-                const maxDistance = Math.sqrt(dimensions.width * dimensions.width + dimensions.height * dimensions.height);
-                const distanceFactor = Math.sqrt(x*x + y*y) / (maxDistance / 4);
-                
-                // Size multiplier for health and rewards
-                const sizeMultiplier = size === 2 ? 4 : size === 3 ? 2 : 1;
-                
-                // Calculate the level based on distance - ensure all squares have a level
-                const level = calculateLevel(x, y);
-                
-                const square: Square = {
-                    id: `${x}-${y}`,
-                    status: isInitialSquare ? 'available' : 'locked',
-                    position: { x, y },
-                    size: {
-                        width: size === 2 ? 200 : 100,
-                        height: size === 3 ? 200 : size === 2 ? 200 : 100,
-                    },
-                    isBoss,
-                    isGate: false, // We'll set gates later
-                    isPortal: false, // We'll set portals later
-                    level,  // Every square has a defined level
-                    adjacentSquares: [],
-                    // Apply scaling to health and money based on position, size, and gate status
-                    health: Math.floor((isBoss ? 1000 : 100) * Math.pow(1.3, distanceFactor) * sizeMultiplier),
-                    maxHealth: Math.floor((isBoss ? 1000 : 100) * Math.pow(1.3, distanceFactor) * sizeMultiplier),
-                    moneyPerSecond: Math.floor((isBoss ? 10 : 1) * Math.pow(1.5, distanceFactor) * sizeMultiplier)
-                };
+    next.squares = state.squares.map(s => statusUpdates[s.id] ? { ...s, ...statusUpdates[s.id] } : s);
 
-                // Add treasure with weighted random selection
-                if (rng() < 0.2 && !isBoss) {
-                    const treasureTypes = ['damage', 'autoclick', 'coins', 'luck'];
-                    const weights = [0.3, 0.3, 0.3, 0.1]; // Luck is more rare
-                    
-                    const random = rng();
-                    let cumulativeWeight = 0;
-                    let selectedType = 'coins';
-                    
-                    for (let i = 0; i < treasureTypes.length; i++) {
-                        cumulativeWeight += weights[i];
-                        if (random <= cumulativeWeight) {
-                            selectedType = treasureTypes[i];
-                            break;
-                        }
-                    }
-                    
-                    // Scale treasure value by level and distance
-                    const valueMultiplier = Math.pow(1.2, level - 1);
-                    square.treasure = {
-                        type: selectedType as 'damage' | 'autoclick' | 'coins' | 'luck',
-                        value: Math.floor((rng() * 100 + 50) * valueMultiplier),
-                    };
-                }
-
-                squares.push(square);
-                squaresByPosition[`${x}-${y}`] = square;
-                squareCount++;
-                
-                // Track squares by level
-                if (!squaresByLevel[level]) {
-                    squaresByLevel[level] = [];
-                }
-                squaresByLevel[level].push(square);
-            }
-        }
-    }
-    
-    // Now place gates at specific positions
-    const gates: Square[] = [];
-    
-    for (const [level, gateX, gateY] of gatePositions) {
-        // Find a square at this position or nearby
-        let gateSquare = squaresByPosition[`${gateX}-${gateY}`];
-        
-        // If position is not available, find the closest square at this level
-        if (!gateSquare || gateSquare.level !== level) {
-            // Find squares at this level
-            const levelSquares = squaresByLevel[level] || [];
-            
-            if (levelSquares.length > 0) {
-                // Sort by distance to the desired gate position
-                levelSquares.sort((a, b) => {
-                    const distA = Math.pow(a.position.x - gateX, 2) + Math.pow(a.position.y - gateY, 2);
-                    const distB = Math.pow(b.position.x - gateX, 2) + Math.pow(b.position.y - gateY, 2);
-                    return distA - distB;
-                });
-                
-                // Pick the closest square
-                gateSquare = levelSquares[0];
-            }
-        }
-        
-        if (gateSquare) {
-            // Convert this square to a gate
-            gateSquare.isGate = true;
-            gateSquare.gateRequirement = calculateGateRequirement(level);
-            
-            // Update health to be higher for gates
-            gateSquare.health = gateSquare.health * GATE_HEALTH_MULTIPLIER;
-            gateSquare.maxHealth = gateSquare.maxHealth * GATE_HEALTH_MULTIPLIER;
-            
-            // Add a coin treasure to the gate
-            const valueMultiplier = Math.pow(1.2, level - 1);
-            gateSquare.treasure = {
-                type: 'coins',
-                value: Math.floor(300 * valueMultiplier),
-            };
-            
-            gates.push(gateSquare);
-        }
-    }
-    
-    // Add portals - one per level except the highest level
-    const portals: Square[] = [];
-    
-    for (let level = 1; level < MAX_LEVEL; level++) {
-        // Get all potential portal squares at this level
-        const levelSquares = squaresByLevel[level] || [];
-        
-        // Find eligible squares (not gates, not bosses)
-        const eligibleSquares = levelSquares.filter(s => !s.isGate && !s.isBoss);
-        
-        if (eligibleSquares.length > 0) {
-            // Find the gate for this level
-            const targetGate = gates.find(g => g.level === level);
-            
-            if (targetGate) {
-                // Choose a random eligible square
-                const portalIndex = Math.floor(rng() * eligibleSquares.length);
-                const portalSquare = eligibleSquares[portalIndex];
-                
-                // Convert this square to a portal
-                portalSquare.isPortal = true;
-                portalSquare.portalTarget = targetGate.id;
-                
-                // Add a coin treasure to the portal
-                const valueMultiplier = Math.pow(1.2, level - 1);
-                portalSquare.treasure = {
-                    type: 'coins',
-                    value: Math.floor(200 * valueMultiplier),
-                };
-                
-                portals.push(portalSquare);
-            }
-        }
+    // Never leave the player stuck: if nothing is attackable, open the whole frontier
+    if (!next.won && attackableSquares(next).length === 0) {
+        const deadIds = new Set(next.squares.filter(s => s.status === 'dead').map(s => s.id));
+        next.squares = next.squares.map(s =>
+            s.status === 'locked' && (s.level || 1) <= next.unlockedZone && s.adjacentSquares.some(id => deadIds.has(id))
+                ? { ...s, status: 'available' as const }
+                : s);
     }
 
-    // Add adjacency information with level progression rules
-    squares.forEach(square => {
-        const { x, y } = square.position;
-        const width = square.size.width > 100 ? 2 : 1;
-        const height = square.size.height > 100 ? 2 : 1;
-
-        // Check all positions around the square
-        for (let dy = -1; dy <= height; dy++) {
-            for (let dx = -1; dx <= width; dx++) {
-                const checkPos = `${x + dx}-${y + dy}`;
-                if (squaresByPosition[checkPos] && checkPos !== `${x}-${y}`) {
-                    const adjacentSquare = squaresByPosition[checkPos];
-                    
-                    // Enforce level progression - only add adjacency if:
-                    // 1. The squares are at the same level, OR
-                    // 2. The current square is a gate and can reveal the next level, OR
-                    // 3. The current square is a portal and can reveal its target
-                    const squareLevel = square.level || 0;
-                    const adjacentLevel = adjacentSquare.level || 0;
-                    
-                    if (
-                        (squareLevel === adjacentLevel) || 
-                        (square.isGate && adjacentLevel === squareLevel + 1) ||
-                        (square.isPortal && square.portalTarget && adjacentSquare.id === square.portalTarget)
-                    ) {
-                        square.adjacentSquares.push(adjacentSquare.id);
-                    }
-                }
-            }
+    // Last resort for odd layouts: open everything already unlocked, then move on a zone
+    while (!next.won && attackableSquares(next).length === 0) {
+        const opened = next.squares.some(s => s.status === 'locked' && (s.level || 1) <= next.unlockedZone);
+        if (!opened) {
+            if (next.unlockedZone >= next.zoneCount) break;
+            next.unlockedZone += 1;
+            events.push({ type: 'zoneUnlocked', zone: next.unlockedZone });
         }
+        next.squares = next.squares.map(s =>
+            s.status === 'locked' && (s.level || 1) <= next.unlockedZone ? { ...s, status: 'available' as const } : s);
+    }
+
+    return { state: next, events };
+};
+
+// Applies several hits in sequence, collecting all events
+export const applyDamageMany = (
+    state: GameState,
+    hits: { squareId: string; damage: number }[],
+    source: 'drone' | 'bomb' | 'lightning',
+    now: number,
+): DamageResult => {
+    let current = state;
+    const events: GameEvent[] = [];
+    hits.forEach(hit => {
+        const result = applyDamage(current, hit.squareId, hit.damage, source, now);
+        current = result.state;
+        events.push(...result.events);
     });
-
-    return squares;
+    return { state: current, events };
 };
 
-// Helper function to limit adjacent squares revealed
-export const getRevealedAdjacents = (squares: Square[], killedSquare: Square): string[] => {
-    // First get all available adjacent squares
-    const lockedAdjacents = killedSquare.adjacentSquares.filter(id => {
-        const adjacentSquare = squares.find(s => s.id === id);
-        return adjacentSquare && adjacentSquare.status === 'locked';
-    });
-    
-    // If this is a gate, reveal more squares (tunnel effect)
-    const revealLimit = killedSquare.isGate ? GATE_AUTO_CLEAR_COUNT : MAX_ADJACENT_REVEALED;
-    
-    // If there are more than the limit of locked squares, choose randomly
-    if (lockedAdjacents.length > revealLimit) {
-        // Shuffle the array and take the first N squares
-        // Fisher-Yates shuffle
-        for (let i = lockedAdjacents.length - 1; i > 0; i--) {
-            const j = Math.floor(Math.random() * (i + 1));
-            [lockedAdjacents[i], lockedAdjacents[j]] = [lockedAdjacents[j], lockedAdjacents[i]];
-        }
-        
-        return lockedAdjacents.slice(0, revealLimit);
+export const bombHits = (state: GameState, squareId: string) => {
+    const target = state.squares.find(s => s.id === squareId);
+    if (!target) return [];
+    const blast = new Set([squareId, ...target.adjacentSquares]);
+    return attackableSquares(state)
+        .filter(s => blast.has(s.id))
+        .map(s => ({ squareId: s.id, damage: state.clickDamage * 6 }));
+};
+
+export const lightningHits = (state: GameState) =>
+    shuffle(attackableSquares(state), Math.random)
+        .slice(0, 6)
+        .map(s => ({ squareId: s.id, damage: state.clickDamage * 4 }));
+
+// Auto damage chips away at the weakest attackable square so kills keep flowing
+export const autoTarget = (state: GameState): Square | undefined =>
+    attackableSquares(state).sort((a, b) => a.health - b.health)[0];
+
+const SAVE_KEY = 'squarzle-save-v3';
+
+export const saveGame = (state: GameState) => {
+    try {
+        localStorage.setItem(SAVE_KEY, JSON.stringify(state));
+    } catch {
+        // Storage can be unavailable (private mode); the game still works without saves
     }
-    
-    return lockedAdjacents;
 };
 
-// Auto-clear squares after a gate is killed
-export const getGateTunnelSquares = (squares: Square[], killedGate: Square): string[] => {
-    if (!killedGate.isGate) return [];
-    
-    // Find squares in the same row to auto-clear (tunnel effect)
-    const { x, y } = killedGate.position;
-    const level = killedGate.level || 1;
-    
-    // Find all locked and available squares on the same row that are not dead yet
-    const tunnelSquares = squares
-        .filter(square => 
-            // Must be on the same row
-            square.position.y === y && 
-            // Must be ahead of the gate
-            square.position.x > x && 
-            // Must not be already dead
-            square.status !== 'dead' &&
-            // Must have the same level
-            square.level === level
-        )
-        // Sort by x position to process them in order from left to right
-        .sort((a, b) => a.position.x - b.position.x)
-        // Take only the first GATE_AUTO_CLEAR_COUNT squares
-        .slice(0, GATE_AUTO_CLEAR_COUNT)
-        // Get their IDs
-        .map(square => square.id);
-    
-    return tunnelSquares;
+export const loadGame = (): GameState | null => {
+    try {
+        const raw = localStorage.getItem(SAVE_KEY);
+        if (!raw) return null;
+        const parsed = JSON.parse(raw) as GameState;
+        if (!Array.isArray(parsed.squares) || typeof parsed.unlockedZone !== 'number' || !parsed.map) return null;
+        return { ...createInitialState(parsed.map), ...parsed };
+    } catch {
+        return null;
+    }
 };
 
-// Special function to handle portal activation
-export const getPortalRevealSquares = (squares: Square[], killedPortal: Square): string[] => {
-    if (!killedPortal.isPortal || !killedPortal.portalTarget) return [];
-    
-    // Find the target gate
-    const targetGate = squares.find(s => s.id === killedPortal.portalTarget);
-    if (!targetGate) return [];
-    
-    // Return the target gate ID to be revealed
-    return [targetGate.id];
-};
-
-// Function to check if a player can pass a gate
-export const canPassGate = (square: Square, gateProgress: { [key: number]: number }): boolean => {
-    if (!square.isGate || !square.gateRequirement || !square.level) return true;
-    
-    const levelProgress = gateProgress[square.level] || 0;
-    return levelProgress >= square.gateRequirement;
+export const clearSave = () => {
+    try {
+        localStorage.removeItem(SAVE_KEY);
+    } catch {
+        // ignore
+    }
 };

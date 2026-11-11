@@ -1,38 +1,286 @@
 /* src/components/VersaillesGrid.module.css */
 .gridContainer {
-  width: 100%;
-  height: 100%;
-  min-height: 400px;
-  position: relative;
-  background: rgba(0, 0, 0, 0.2);
-  border-radius: 8px;
-  margin: 0 auto;
+  position: absolute;
+  inset: 0;
   overflow: hidden;
+  touch-action: none;
+}
+
+.gridContainer[data-panning] { cursor: grabbing; }
+.gridContainer[data-panning] * { cursor: grabbing !important; }
+
+.shake { animation: shake 0.5s cubic-bezier(0.36, 0.07, 0.19, 0.97); }
+
+@keyframes shake {
+  10%, 90% { transform: translate(-2px, 1px); }
+  20%, 80% { transform: translate(4px, -2px); }
+  30%, 50%, 70% { transform: translate(-6px, 3px); }
+  40%, 60% { transform: translate(6px, -3px); }
 }
 
 .grid {
+  --cell: 70px;
+  --gap: 6px;
+  --pad: 24px;
+  position: relative;
   display: grid;
-  grid-template-columns: repeat(15, 70px);
-  gap: 4px;
-  padding: 8px;
-  width: auto;
-  height: auto;
-  background: rgba(0, 0, 0, 0.2);
+  grid-auto-rows: var(--cell);
+  gap: var(--gap);
+  padding: var(--pad);
+}
+
+.cell {
+  position: relative;
 }
 
 .transformWrapper {
-  width: 100%;
-  height: 100%;
+  width: 100% !important;
+  height: 100% !important;
 }
 
 .transformContent {
-  width: 100%;
-  height: 100%;
+  width: auto;
+  height: auto;
 }
 
+/* The box the camera fits to; HUD margins are added in screen space */
+.cameraTarget {
+  position: absolute;
+  pointer-events: none;
+}
+
+/* Glowing outline around the playable area, drawn along the mortar lines */
+.zoneFrame {
+  position: absolute;
+  left: calc(var(--pad) - var(--gap) / 2);
+  top: calc(var(--pad) - var(--gap) / 2);
+  z-index: 1;
+  overflow: visible;
+  pointer-events: none;
+  filter: drop-shadow(0 0 5px var(--c)) drop-shadow(0 0 12px var(--c));
+  animation: frameGlow 3s ease-in-out infinite;
+}
+
+.zoneFrame path {
+  fill: none;
+  stroke: var(--c);
+  stroke-width: 2.5px;
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+  transition: stroke 1s;
+}
+
+@keyframes frameGlow {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
+}
+
+/* "Coming soon" label floating over the next zone's fog */
+.teaserLabel {
+  position: absolute;
+  z-index: 3;
+  transform: translate(-50%, -50%);
+  white-space: nowrap;
+  text-shadow: 0 2px 6px rgba(0, 0, 0, 0.9);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  pointer-events: none;
+  text-align: center;
+  color: white;
+}
+
+.teaserLock {
+  font-size: 26px;
+  filter: drop-shadow(0 0 10px var(--c));
+}
+
+.teaserTitle {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--c);
+}
+
+.teaserName {
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.teaserHint {
+  font-size: 11px;
+  opacity: 0.6;
+}
+
+/* --- Floating effects --- */
+.effect {
+  position: absolute;
+  left: 50%;
+  top: 30%;
+  pointer-events: none;
+  white-space: nowrap;
+  font-weight: 900;
+  transform: translate(-50%, 0);
+  text-shadow: 0 2px 0 rgba(0, 0, 0, 0.6), 0 0 8px rgba(0, 0, 0, 0.5);
+  animation: floatUp 0.9s ease-out forwards;
+  z-index: 10;
+}
+
+.effect[data-kind='dmg'] { font-size: 15px; color: white; }
+
+.effect[data-kind='crit'] {
+  font-size: 22px;
+  color: #fde047;
+  animation: critPop 0.9s ease-out forwards;
+}
+
+.effect[data-kind='coin'] { font-size: 14px; color: #facc15; top: 0; animation-duration: 1.1s; }
+
+.effect[data-kind='jackpot'] {
+  font-size: 20px;
+  color: #f0abfc;
+  top: -10%;
+  animation: critPop 1.4s ease-out forwards;
+}
+
+.effect[data-kind='treasure'] { font-size: 13px; color: #86efac; top: -25%; animation-duration: 1.4s; }
+
+.effect[data-kind='sealed'] { font-size: 12px; color: #fca5a5; top: 40%; }
+
+.effect[data-kind='zap'] {
+  font-size: 26px;
+  top: 10%;
+  animation: zap 0.5s ease-out forwards;
+}
+
+.effect[data-kind='boom'] {
+  top: 50%;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  background: radial-gradient(circle, #fff7ed 0%, #fb923c 35%, #dc2626 60%, transparent 70%);
+  animation: boom 0.6s ease-out forwards;
+}
+
+@keyframes floatUp {
+  0% { opacity: 0; transform: translate(-50%, 6px) scale(0.6); }
+  15% { opacity: 1; transform: translate(-50%, 0) scale(1.1); }
+  100% { opacity: 0; transform: translate(-50%, -46px) scale(1); }
+}
+
+@keyframes critPop {
+  0% { opacity: 0; transform: translate(-50%, 0) scale(0.4) rotate(-12deg); }
+  20% { opacity: 1; transform: translate(-50%, -6px) scale(1.5) rotate(6deg); }
+  40% { transform: translate(-50%, -12px) scale(1.1) rotate(-2deg); }
+  100% { opacity: 0; transform: translate(-50%, -56px) scale(1); }
+}
+
+@keyframes zap {
+  0% { opacity: 0; transform: translate(-50%, -30px) scale(0.6); }
+  30% { opacity: 1; transform: translate(-50%, 0) scale(1.3); }
+  100% { opacity: 0; transform: translate(-50%, 0) scale(1); }
+}
+
+@keyframes boom {
+  0% { opacity: 1; transform: translate(-50%, -50%) scale(0.3); }
+  100% { opacity: 0; transform: translate(-50%, -50%) scale(5); }
+}
+
+/* --- Debris: pieces of a square breaking away and dropping into the void --- */
+.debris {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 6;
+}
+
+/* Horizontal drift (eases out) and fall (eases in) run on separate layers,
+   which together trace a gravity-like arc */
+.fragmentDrift {
+  position: absolute;
+  inset: 0;
+  animation: debrisDrift 1s cubic-bezier(0.2, 0.6, 0.4, 1) both;
+}
+
+.fragment {
+  position: absolute;
+  inset: 0;
+  border-radius: 10px;
+  background:
+    radial-gradient(120% 80% at 30% 0%, rgba(255, 255, 255, 0.35), transparent 55%),
+    linear-gradient(160deg, var(--c-light) -30%, var(--c) 45%, var(--c-dark) 140%);
+  animation: debrisFall 1s both;
+}
+
+@keyframes debrisDrift {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(var(--dx)); }
+}
+
+@keyframes debrisFall {
+  0% {
+    transform: translateY(-3px) rotate(0deg) scale(1);
+    filter: brightness(1.6);
+    animation-timing-function: cubic-bezier(0.3, 0.6, 0.5, 1);
+  }
+  14% {
+    transform: translateY(-10px) rotate(calc(var(--rot) * 0.1)) scale(1.02);
+    filter: brightness(1.15);
+    animation-timing-function: cubic-bezier(0.55, 0, 0.9, 0.6);
+  }
+  100% {
+    transform: translateY(150px) rotate(var(--rot)) scale(0.35);
+    filter: brightness(0.3);
+    opacity: 0;
+  }
+}
+
+/* Chips are small and fall faster */
+.debris[data-kind='chip'] .fragment,
+.debris[data-kind='chip'] .fragmentDrift { animation-duration: 0.75s; }
+
+/* --- Hover tooltip --- */
+.tooltip {
+  position: absolute;
+  left: 0;
+  top: 0;
+  z-index: 40;
+  max-width: 260px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(17, 12, 30, 0.94);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(10px);
+  color: white;
+  font-size: 12px;
+  line-height: 1.4;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+
+.tooltip[data-visible='true'] { opacity: 1; }
+
+.tooltipTitle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 900;
+  margin-bottom: 3px;
+}
+
+.tooltip p { color: rgba(255, 255, 255, 0.72); }
+.tooltip p + p { margin-top: 3px; }
+
+/* --- Zoom controls --- */
 .gridControls {
   position: absolute;
-  bottom: 16px;
+  bottom: 96px;
   right: 16px;
   z-index: 10;
   display: flex;
@@ -44,63 +292,29 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  background-color: rgba(147, 51, 234, 0.8);
-  border: none;
+  width: 42px;
+  height: 42px;
+  border-radius: 14px;
+  background: rgba(20, 16, 34, 0.75);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  backdrop-filter: blur(8px);
   color: white;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: transform 0.15s ease, background 0.15s ease;
 }
 
-.controlButton:hover {
-  background-color: rgba(147, 51, 234, 1);
-  transform: scale(1.05);
-}
+.controlButton:hover { background: rgba(88, 28, 135, 0.85); transform: scale(1.06); }
+.controlButton:active { transform: scale(0.94); }
 
-.controlButton:active {
-  transform: scale(0.95);
-}
-
-.controlIcon {
-  width: 20px;
-  height: 20px;
-}
-
-@media (min-width: 640px) {
-  .grid {
-    grid-template-columns: repeat(15, 70px);
-  }
-  
-  .gridContainer {
-    min-height: 500px;
-  }
-}
+.controlIcon { width: 20px; height: 20px; }
 
 @media (max-width: 639px) {
-  .gridContainer {
-    min-height: 350px;
-  }
-  
   .grid {
-    padding: 4px;
-    gap: 2px;
-    grid-template-columns: repeat(15, 50px);
+    --cell: 52px;
+    --gap: 4px;
+    --pad: 16px;
   }
-  
-  .gridControls {
-    bottom: 8px;
-    right: 8px;
-  }
-  
-  .controlButton {
-    width: 36px;
-    height: 36px;
-  }
-  
-  .controlIcon {
-    width: 16px;
-    height: 16px;
-  }
+
+  .gridControls { bottom: 92px; right: 10px; }
+  .controlButton { width: 38px; height: 38px; }
 }
